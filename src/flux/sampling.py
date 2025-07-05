@@ -8,7 +8,6 @@ from torch import Tensor
 from .model import Flux
 from .modules.conditioner import HFEmbedder
 
-
 def get_noise(
     num_samples: int,
     height: int,
@@ -35,6 +34,7 @@ def prepare(t5: HFEmbedder, clip: HFEmbedder, img: Tensor, prompt: str | list[st
         bs = len(prompt)
 
     img = rearrange(img, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+
     if img.shape[0] == 1 and bs > 1:
         img = repeat(img, "1 ... -> bs ...", bs=bs)
 
@@ -108,26 +108,51 @@ def denoise(
     # sampling parameters
     timesteps: list[float],
     guidance: float = 4.0,
+    cond_latent = None,
     true_gs = 1,
     timestep_to_start_cfg=0,
     # ip-adapter parameters
     image_proj: Tensor=None, 
     neg_image_proj: Tensor=None, 
     ip_scale: Tensor | float = 1.0,
-    neg_ip_scale: Tensor | float = 1.0
+    neg_ip_scale: Tensor | float = 1.0,
+    is_generation: bool = True,
 ):
     i = 0
     # this is ignored for schnell
     guidance_vec = torch.full((img.shape[0],), guidance, device=img.device, dtype=img.dtype)
+    t_0_vec = torch.full((img.shape[0],), timesteps[-1], dtype=img.dtype, device=img.device)
+    img, _ = img.chunk(2, dim=1) if cond_latent is not None else (img, None)
+
     for t_curr, t_prev in zip(timesteps[:-1], timesteps[1:]):
         t_vec = torch.full((img.shape[0],), t_curr, dtype=img.dtype, device=img.device)
+        if cond_latent is not None:
+            _, c, h, w = cond_latent.shape
+            assert h * w // 4 == img.shape[1] and c * 4 == img.shape[2]  # tianshuo
+            img = rearrange(img, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h // 2, w=w // 2, ph=2, pw=2)
+            # cond = rearrange(cond_latent, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+            
+            if is_generation:
+                img = torch.cat((img, cond_latent.to(img.dtype)), dim=3)
+                img = rearrange(img, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+                # img = torch.cat((img, cond.to(img.dtype)), dim=1)
+                t1 = t_vec
+                t2 = t_0_vec
+            else:
+                img = torch.cat((cond_latent.to(img.dtype), img), dim=3)
+                img = rearrange(img, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+                # img = torch.cat((cond.to(img.dtype), img), dim=1)
+                t1 = t_0_vec
+                t2 = t_vec
+
         pred = model(
             img=img,
             img_ids=img_ids,
             txt=txt,
             txt_ids=txt_ids,
             y=vec,
-            timesteps=t_vec,
+            timesteps=t1,
+            timesteps2=t2,
             guidance=guidance_vec,
             image_proj=image_proj,
             ip_scale=ip_scale, 
@@ -139,14 +164,29 @@ def denoise(
                 txt=neg_txt,
                 txt_ids=neg_txt_ids,
                 y=neg_vec,
-                timesteps=t_vec,
+                timesteps=t1,
+                timesteps2=t2,
                 guidance=guidance_vec, 
                 image_proj=neg_image_proj,
                 ip_scale=neg_ip_scale, 
             )     
             pred = neg_pred + true_gs * (pred - neg_pred)
+        
+        if cond_latent is not None:
+            img = rearrange(img, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h // 2, w=w, ph=2, pw=2)
+            pred = rearrange(pred, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h // 2, w=w, ph=2, pw=2)
+            if is_generation:
+                img, _ = img.chunk(2, dim=3)
+                pred, _ = pred.chunk(2, dim=3)
+            else:
+                _, img = img.chunk(2, dim=3)
+                _, pred = pred.chunk(2, dim=3)
+            img = rearrange(img, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+            pred = rearrange(pred, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+
         img = img + (t_prev - t_curr) * pred
         i += 1
+
     return img
 
 def denoise_controlnet(

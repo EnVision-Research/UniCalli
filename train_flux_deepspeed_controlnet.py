@@ -37,7 +37,8 @@ from einops import rearrange
 from src.flux.sampling import denoise, get_noise, get_schedule, prepare, unpack
 from src.flux.util import (configs, load_ae, load_clip,
                        load_flow_model2, load_controlnet, load_t5)
-from image_datasets.canny_dataset import loader
+# from image_datasets.canny_dataset import loader
+from image_datasets.dataset import loader
 if is_wandb_available():
     import wandb
 logger = get_logger(__name__, log_level="INFO")
@@ -62,8 +63,9 @@ def parse_args():
 
 
     return args.config
-def main():
 
+
+def main():
     args = OmegaConf.load(parse_args())
     is_schnell = args.model_name == "flux-schnell"
     logging_dir = os.path.join(args.output_dir, args.logging_dir)
@@ -108,12 +110,17 @@ def main():
     dit.to(accelerator.device)
 
     controlnet = load_controlnet(name=args.model_name, device=accelerator.device, transformer=dit)
+    
+    # print('load pretrained weight, for the first time...')
+    # state_dict = torch.load("/data/user/user64/code/word-flux/ckpts/ckpts-column-cnt-chars5-newcap2/checkpoint-30000/controlnet.bin", map_location="cpu")
+    # controlnet.load_state_dict(state_dict, strict=True)
+
     controlnet = controlnet.to(torch.float32)
     controlnet.train()
 
     optimizer_cls = torch.optim.AdamW
 
-    print(sum([p.numel() for p in controlnet.parameters() if p.requires_grad]) / 1000000, 'parameters')
+    print(sum([p.numel() for p in controlnet.parameters() if p.requires_grad]) / 1000000, 'M parameters')
     optimizer = optimizer_cls(
         [p for p in controlnet.parameters() if p.requires_grad],
         lr=args.learning_rate,
@@ -203,23 +210,29 @@ def main():
         disable=not accelerator.is_local_main_process,
     )
 
+    print_shape_flag = True
     for epoch in range(first_epoch, args.num_train_epochs):
         train_loss = 0.0
         for step, batch in enumerate(train_dataloader):
             with accelerator.accumulate(controlnet):
-                img, control_image, prompts = batch
+                img, prompts, control_image = batch
+
+                if print_shape_flag:
+                    print_shape_flag = False
+                    print(f"img shape: {img.shape}")
+                    print(f"control_image shape: {control_image.shape}")
+                    print(f"prompts: {prompts}")
+
                 control_image = control_image.to(accelerator.device)
                 with torch.no_grad():
                     x_1 = vae.encode(img.to(accelerator.device).to(torch.float32))
                     inp = prepare(t5=t5, clip=clip, img=x_1, prompt=prompts)
-
                     x_1 = rearrange(x_1, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
 
                 bs = img.shape[0]
                 t = torch.sigmoid(torch.randn((bs,), device=accelerator.device))
 
                 x_0 = torch.randn_like(x_1).to(accelerator.device)
-                print(t.shape, x_1.shape, x_0.shape)
                 x_t = (1 - t.unsqueeze(1).unsqueeze(2).repeat(1, x_1.shape[1], x_1.shape[2])) * x_1 + t.unsqueeze(1).unsqueeze(2).repeat(1, x_1.shape[1], x_1.shape[2]) * x_0
                 bsz = x_1.shape[0]
                 guidance_vec = torch.full((x_t.shape[0],), 4, device=x_t.device, dtype=x_t.dtype)
@@ -248,7 +261,8 @@ def main():
                     guidance=guidance_vec.to(weight_dtype),
                 )
 
-                loss = F.mse_loss(model_pred.float(), (x_0 - x_1).float(), reduction="mean")
+                residual = x_0 - x_1
+                loss = F.mse_loss(model_pred.float(), residual.float(), reduction="mean")
 
                 # Gather the losses across all processes for logging (if we use distributed training).
                 avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()

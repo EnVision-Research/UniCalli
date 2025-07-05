@@ -22,7 +22,11 @@ sdist/
 var/
 wheels/
 weights/
-
+ckpts/
+word_dataset/
+wandb/
+libs/
+*.ttf
 share/python-wheels/
 *.egg-info/
 .installed.cfg

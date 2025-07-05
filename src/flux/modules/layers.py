@@ -182,10 +182,44 @@ class DoubleStreamBlockLoraProcessor(nn.Module):
         self.qkv_lora2 = LoRALinearLayer(dim, dim * 3, rank, network_alpha)
         self.proj_lora2 = LoRALinearLayer(dim, dim, rank, network_alpha)
         self.lora_weight = lora_weight
+        self.h = 80  # tianshuo
+        self.w = 16
 
-    def forward(self, attn, img, txt, vec, pe, **attention_kwargs):
+    def forward(self, attn, img, txt, vec, vec2, pe, **attention_kwargs):
         img_mod1, img_mod2 = attn.img_mod(vec)
         txt_mod1, txt_mod2 = attn.txt_mod(vec)
+
+        def prepare_adaln(p1, p2, s):
+            p1 = p1.repeat(1, s//2, 1)
+            p2 = p2.repeat(1, s//2, 1)
+            
+            p1 = rearrange(p1, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=self.h//2, w=self.w//2, ph=2, pw=2)
+            p2 = rearrange(p2, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=self.h//2, w=self.w//2, ph=2, pw=2)
+            p = torch.cat([p1, p2], dim=3)
+            return rearrange(p, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+            
+
+        if vec2 is not None:   # tianshuo
+            img_mod1_2, img_mod2_2 = attn.img_mod(vec2)
+            txt_mod1_2, txt_mod2_2 = attn.txt_mod(vec2)
+            
+            s = img.shape[1]  # Spatial上cat
+            img_mod1.scale = prepare_adaln(img_mod1.scale, img_mod1_2.scale, s)
+            img_mod1.shift = prepare_adaln(img_mod1.shift, img_mod1_2.shift, s)
+            img_mod1.gate = prepare_adaln(img_mod1.gate, img_mod1_2.gate, s)
+
+            img_mod2.scale = prepare_adaln(img_mod2.scale, img_mod2_2.scale, s)
+            img_mod2.shift = prepare_adaln(img_mod2.shift, img_mod2_2.shift, s)
+            img_mod2.gate = prepare_adaln(img_mod2.gate, img_mod2_2.gate, s)
+
+            s = txt.shape[1]
+            txt_mod1.scale = torch.cat([txt_mod1.scale.repeat(1, s//2, 1), txt_mod1_2.scale.repeat(1, s//2, 1)], dim=1)
+            txt_mod1.shift = torch.cat([txt_mod1.shift.repeat(1, s//2, 1), txt_mod1_2.shift.repeat(1, s//2, 1)], dim=1)
+            txt_mod1.gate = torch.cat([txt_mod1.gate.repeat(1, s//2, 1), txt_mod1_2.gate.repeat(1, s//2, 1)], dim=1)
+
+            txt_mod2.scale = torch.cat([txt_mod2.scale.repeat(1, s//2, 1), txt_mod2_2.scale.repeat(1, s//2, 1)], dim=1)
+            txt_mod2.shift = torch.cat([txt_mod2.shift.repeat(1, s//2, 1), txt_mod2_2.shift.repeat(1, s//2, 1)], dim=1)
+            txt_mod2.gate = torch.cat([txt_mod2.gate.repeat(1, s//2, 1), txt_mod2_2.gate.repeat(1, s//2, 1)], dim=1)
 
         # prepare image for attention
         img_modulated = attn.img_norm1(img)
@@ -301,7 +335,7 @@ class IPDoubleStreamBlockProcessor(nn.Module):
         return img, txt
 
 class DoubleStreamBlockProcessor:
-    def __call__(self, attn, img, txt, vec, pe, **attention_kwargs):
+    def __call__(self, attn, img, txt, vec, vec2, pe, **attention_kwargs):
         img_mod1, img_mod2 = attn.img_mod(vec)
         txt_mod1, txt_mod2 = attn.txt_mod(vec)
 
@@ -379,14 +413,15 @@ class DoubleStreamBlock(nn.Module):
         img: Tensor,
         txt: Tensor,
         vec: Tensor,
+        vec2: Tensor,
         pe: Tensor,
         image_proj: Tensor = None,
         ip_scale: float =1.0,
     ) -> tuple[Tensor, Tensor]:
         if image_proj is None:
-            return self.processor(self, img, txt, vec, pe)
+            return self.processor(self, img, txt, vec, vec2, pe)
         else:
-            return self.processor(self, img, txt, vec, pe, image_proj, ip_scale)
+            return self.processor(self, img, txt, vec, vec2, pe, image_proj, ip_scale)
 
 class IPSingleStreamBlockProcessor(nn.Module):
     """Attention processor for handling IP-adapter with single stream block."""
@@ -462,7 +497,7 @@ class SingleStreamBlockLoraProcessor(nn.Module):
         self.proj_lora = LoRALinearLayer(15360, dim, rank, network_alpha)
         self.lora_weight = lora_weight
 
-    def forward(self, attn: nn.Module, x: Tensor, vec: Tensor, pe: Tensor) -> Tensor:
+    def forward(self, attn: nn.Module, x: Tensor, vec: Tensor, vec2: Tensor, pe: Tensor) -> Tensor:
 
         mod, _ = attn.modulation(vec)
         x_mod = (1 + mod.scale) * attn.pre_norm(x) + mod.shift
@@ -483,7 +518,7 @@ class SingleStreamBlockLoraProcessor(nn.Module):
 
 
 class SingleStreamBlockProcessor:
-    def __call__(self, attn: nn.Module, x: Tensor, vec: Tensor, pe: Tensor) -> Tensor:
+    def __call__(self, attn: nn.Module, x: Tensor, vec: Tensor, vec2: Tensor, pe: Tensor) -> Tensor:
 
         mod, _ = attn.modulation(vec)
         x_mod = (1 + mod.scale) * attn.pre_norm(x) + mod.shift
@@ -547,14 +582,15 @@ class SingleStreamBlock(nn.Module):
         self,
         x: Tensor,
         vec: Tensor,
+        vec2: Tensor,
         pe: Tensor,
         image_proj: Tensor | None = None,
         ip_scale: float = 1.0
     ) -> Tensor:
         if image_proj is None:
-            return self.processor(self, x, vec, pe)
+            return self.processor(self, x, vec, vec2, pe)
         else:
-            return self.processor(self, x, vec, pe, image_proj, ip_scale)
+            return self.processor(self, x, vec, vec2, pe, image_proj, ip_scale)
 
 
 
@@ -565,7 +601,7 @@ class LastLayer(nn.Module):
         self.linear = nn.Linear(hidden_size, patch_size * patch_size * out_channels, bias=True)
         self.adaLN_modulation = nn.Sequential(nn.SiLU(), nn.Linear(hidden_size, 2 * hidden_size, bias=True))
 
-    def forward(self, x: Tensor, vec: Tensor) -> Tensor:
+    def forward(self, x: Tensor, vec: Tensor, vec2: Tensor) -> Tensor:
         shift, scale = self.adaLN_modulation(vec).chunk(2, dim=1)
         x = (1 + scale[:, None, :]) * self.norm_final(x) + shift[:, None, :]
         x = self.linear(x)

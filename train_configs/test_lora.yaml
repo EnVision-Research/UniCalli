@@ -1,14 +1,14 @@
 model_name: "flux-dev"
 data_config:
-  train_batch_size: 1
+  train_batch_size: 4
   num_workers: 4
-  img_size: 512
-  img_dir: images/
-  random_ratio: true # support multi crop preprocessing
-report_to: wandb
-train_batch_size: 1
-output_dir: lora/
-max_train_steps: 100000
+  img_size: 128
+  img_dir: ./word_dataset/finalpage
+  # random_ratio: true # support multi crop preprocessing
+report_to: wandb  # wandb
+train_batch_size: 4
+output_dir: ckpts/debug/
+max_train_steps: 1000000
 learning_rate: 1e-5
 lr_scheduler: constant
 lr_warmup_steps: 10
@@ -19,19 +19,27 @@ adam_epsilon: 1e-8
 max_grad_norm: 1.0
 logging_dir: logs
 mixed_precision: "bf16"
-checkpointing_steps: 2500
-checkpoints_total_limit: 10
+checkpointing_steps: 5000
+checkpoints_total_limit: 20
 tracker_project_name: lora_test
 resume_from_checkpoint: latest
-gradient_accumulation_steps: 2
-rank: 16
+gradient_accumulation_steps: 1
+rank: 128  # 16
 single_blocks: "1,2,3,4"
 double_blocks: null
 disable_sampling: false
-sample_every: 250 # sample every this many steps
-sample_width: 1024
-sample_height: 1024
+sample_every: 5000 # sample every this many steps
+sample_width: 256
+sample_height: 640
 sample_steps: 20
 sample_prompts:
-    - "woman with red hair, playing chess at the park, bomb going off in the background"
-    - "a woman holding a coffee cup, in a beanie, sitting at a cafe"
+  - "A piece of traditional Chinese calligraphy artwork from ancient times, author: zhi yong, font: kai, background color: white."
+  - "font: kai, background color: white."
+  - "A piece of traditional Chinese calligraphy artwork from ancient times, author: liu gong quan, font: kai, background color: black."
+  - "font: kai, background color: white."
+  - "A piece of traditional Chinese calligraphy artwork from ancient times, author: wang xi zhi, font: kai, background color: black."
+  - "font: kai, background color: black."
+  - "A piece of traditional Chinese calligraphy artwork from ancient times, author: mo ya ke shi, font: li, background color: black."
+  - "A piece of traditional Chinese calligraphy artwork from ancient times, author: zao xiang ji, font: kai, background color: black."
+  - "font: kai, background color: black."
+  - "A piece of traditional Chinese calligraphy artwork from ancient times, author: yan zhen qing, font: xing, background color: black."

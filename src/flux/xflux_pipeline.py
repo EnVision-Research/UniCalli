@@ -176,6 +176,7 @@ class XFluxPipeline:
                  neg_prompt: str = '',
                  neg_image_prompt: Image = None,
                  timestep_to_start_cfg: int = 0,
+                 is_generation: bool = True
                  ):
         width = 16 * (width // 16)
         height = 16 * (height // 16)
@@ -192,8 +193,10 @@ class XFluxPipeline:
             image_proj = self.get_image_proj(image_prompt)
             neg_image_proj = self.get_image_proj(neg_image_prompt)
 
-        if self.controlnet_loaded:
-            controlnet_image = self.annotator(controlnet_image, width, height)
+        # if self.controlnet_loaded:
+        if controlnet_image is not None:
+            if self.controlnet_loaded:
+                controlnet_image = self.annotator(controlnet_image, width, height)
             controlnet_image = torch.from_numpy((np.array(controlnet_image) / 127.5) - 1)
             controlnet_image = controlnet_image.permute(
                 2, 0, 1).unsqueeze(0).to(torch.bfloat16).to(self.device)
@@ -214,6 +217,7 @@ class XFluxPipeline:
             neg_image_proj=neg_image_proj,
             ip_scale=ip_scale,
             neg_ip_scale=neg_ip_scale,
+            is_generation=is_generation
         )
 
     @torch.inference_mode()
@@ -276,11 +280,13 @@ class XFluxPipeline:
         neg_image_proj=None,
         ip_scale=1.0,
         neg_ip_scale=1.0,
+        is_generation=True,
     ):
         x = get_noise(
             1, height, width, device=self.device,
             dtype=torch.bfloat16, seed=seed
         )
+
         timesteps = get_schedule(
             num_steps,
             (width // 8) * (height // 8) // (16 * 16),
@@ -290,6 +296,11 @@ class XFluxPipeline:
         with torch.no_grad():
             if self.offload:
                 self.t5, self.clip = self.t5.to(self.device), self.clip.to(self.device)
+
+            if not self.controlnet_loaded and controlnet_image is not None:  # tianshuo
+                width //= 2
+                cond_latent = self.ae.encode(controlnet_image.to(self.device, dtype=torch.float32))
+
             inp_cond = prepare(t5=self.t5, clip=self.clip, img=x, prompt=prompt)
             neg_inp_cond = prepare(t5=self.t5, clip=self.clip, img=x, prompt=neg_prompt)
 
@@ -321,6 +332,7 @@ class XFluxPipeline:
                     **inp_cond,
                     timesteps=timesteps,
                     guidance=guidance,
+                    cond_latent=cond_latent,
                     timestep_to_start_cfg=timestep_to_start_cfg,
                     neg_txt=neg_inp_cond['txt'],
                     neg_txt_ids=neg_inp_cond['txt_ids'],
@@ -330,6 +342,7 @@ class XFluxPipeline:
                     neg_image_proj=neg_image_proj,
                     ip_scale=ip_scale,
                     neg_ip_scale=neg_ip_scale,
+                    is_generation=is_generation,
                 )
 
             if self.offload:

@@ -140,8 +140,9 @@ class Flux(nn.Module):
         img_ids: Tensor,
         txt: Tensor,
         txt_ids: Tensor,
-        timesteps: Tensor,
         y: Tensor,
+        timesteps: Tensor,
+        timesteps2: Tensor | None = None,
         block_controlnet_hidden_states=None,
         guidance: Tensor | None = None,
         image_proj: Tensor | None = None, 
@@ -153,11 +154,25 @@ class Flux(nn.Module):
         # running on sequences img
         img = self.img_in(img)
         vec = self.time_in(timestep_embedding(timesteps, 256))
+        
+        if timesteps2 is not None:
+            vec2 = self.time_in(timestep_embedding(timesteps2, 256))
+        else:
+            vec2 = None
+
         if self.params.guidance_embed:
             if guidance is None:
                 raise ValueError("Didn't get guidance strength for guidance distilled model.")
             vec = vec + self.guidance_in(timestep_embedding(guidance, 256))
+            if vec2 is not None:
+                vec2 = vec2 + self.guidance_in(timestep_embedding(guidance, 256))
+
+        if y.dtype != vec.dtype:
+            y = y.to(vec.dtype)
+
         vec = vec + self.vector_in(y)
+        if vec2 is not None:
+            vec2 = vec2 + self.vector_in(y)
         txt = self.txt_in(txt)
 
         ids = torch.cat((txt_ids, img_ids), dim=1)
@@ -182,6 +197,7 @@ class Flux(nn.Module):
                     img,
                     txt,
                     vec,
+                    vec2,
                     pe,
                     image_proj,
                     ip_scale,
@@ -191,6 +207,7 @@ class Flux(nn.Module):
                     img=img, 
                     txt=txt, 
                     vec=vec, 
+                    vec2=vec2,
                     pe=pe, 
                     image_proj=image_proj,
                     ip_scale=ip_scale, 
@@ -218,11 +235,12 @@ class Flux(nn.Module):
                     create_custom_forward(block),
                     img,
                     vec,
+                    vec2,
                     pe,
                 )
             else:
-                img = block(img, vec=vec, pe=pe)
+                img = block(img, vec=vec, vec2=vec2, pe=pe)
         img = img[:, txt.shape[1] :, ...]
 
-        img = self.final_layer(img, vec)  # (N, T, patch_size ** 2 * out_channels)
+        img = self.final_layer(img, vec, vec2)  # (N, T, patch_size ** 2 * out_channels)
         return img
