@@ -264,8 +264,9 @@ def main():
                 with torch.no_grad():
                     x_1 = vae.encode(img.to(accelerator.device).to(torch.float32))
                     cond_latent = vae.encode(cond_image.to(torch.float32))
-                    inp = prepare(t5=t5, clip=clip, 
-                        img=torch.cat((x_1, cond_latent), dim=3), prompt=prompts)
+                    # inp = prepare(t5=t5, clip=clip, 
+                    #     img=torch.cat((x_1, cond_latent), dim=3), prompt=prompts)
+                    inp = prepare(t5=t5, clip=clip, img=x_1, prompt=prompts)
 
                 bs = img.shape[0]
                 mode = random.choice(['cond', 'img'])
@@ -277,17 +278,18 @@ def main():
                     t_cond = torch.tensor([timesteps[random.randint(0, 999)]]).to(accelerator.device)
                 
                 x_0 = torch.randn_like(x_1).to(accelerator.device)
-                x_t = (1 - t) * x_1 + t * x_0
+                x_t = (1 - t) * x_1 + t * x_0 if mode == 'img' else x_1
                 b, c, h, w = x_t.shape
                 
                 cond_0 = torch.randn_like(cond_latent).to(accelerator.device)
-                cond_t = (1 - t_cond) * cond_latent + t_cond * cond_0
-                x_t = torch.cat((x_t, cond_t), dim=3)
+                cond_t = (1 - t_cond) * cond_latent + t_cond * cond_0 if mode == 'cond' else cond_latent
+                # x_t = torch.cat((x_t, cond_t), dim=3)
                 
-                # x_t = rearrange(x_t, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
-                # cond_t = rearrange(cond_t, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
-                b, c, h, w = x_t.shape
                 x_t = rearrange(x_t, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+                cond_t = rearrange(cond_t, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+                x_t = torch.cat((x_t, cond_t), dim=1)
+                # b, c, h, w = x_t.shape
+                # x_t = rearrange(x_t, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
 
                 bsz = x_1.shape[0]
                 guidance_vec = torch.full((x_t.shape[0],), 1, device=x_t.device, dtype=x_t.dtype)
@@ -301,10 +303,10 @@ def main():
                                 timesteps2=t_cond.to(weight_dtype),
                                 guidance=guidance_vec.to(weight_dtype),)
 
-                model_pred = rearrange(model_pred, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h//2, w=w//2, ph=2, pw=2)
-                img_pred, cond_pred = model_pred.chunk(2, dim=3)
-                # img_pred = rearrange(img_pred, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h//2, w=w//2, ph=2, pw=2)
-                # cond_pred = rearrange(cond_pred, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h//2, w=w//2, ph=2, pw=2)
+                # model_pred = rearrange(model_pred, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h//2, w=w//2, ph=2, pw=2)
+                img_pred, cond_pred = model_pred.chunk(2, dim=1)
+                img_pred = rearrange(img_pred, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h//2, w=w//2, ph=2, pw=2)
+                cond_pred = rearrange(cond_pred, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h//2, w=w//2, ph=2, pw=2)
 
                 loss_img = F.mse_loss(img_pred.float(), (x_0 - x_1).float(), reduction="mean")
                 loss_cond = F.mse_loss(cond_pred.float(), (cond_0 - cond_latent).float(), reduction="mean")
@@ -381,7 +383,8 @@ def main():
                             if i < len(args.sample_prompts) // 2:
                                 # generation
                                 idx = i
-                                cond_image = Image.open(f'test_data_gen/cond_{idx}.png')
+                                # cond_image = Image.open(f'test_data_gen/cond_{idx}.png')
+                                cond_image = Image.open(f'test_data_rec/img_{idx}.png')
                                 result = sampler(prompt=prompt,
                                                 width=args.sample_width,
                                                 height=args.sample_height,
@@ -394,7 +397,8 @@ def main():
                             else:
                                 # recognition
                                 idx = i - len(args.sample_prompts) // 2
-                                cond_image = Image.open(f'test_data_rec/img_{idx}.png')
+                                # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
+                                cond_image = Image.open(f'test_data_gen/cond_{idx}.png')
                                 result = sampler(prompt=prompt,
                                                 width=args.sample_width,
                                                 height=args.sample_height,

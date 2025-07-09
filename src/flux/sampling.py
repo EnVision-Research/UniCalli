@@ -42,6 +42,7 @@ def prepare(t5: HFEmbedder, clip: HFEmbedder, img: Tensor, prompt: str | list[st
     img_ids[..., 1] = img_ids[..., 1] + torch.arange(h // 2)[:, None]
     img_ids[..., 2] = img_ids[..., 2] + torch.arange(w // 2)[None, :]
     img_ids = repeat(img_ids, "h w c -> b (h w) c", b=bs)
+    img_ids = img_ids.repeat(1, 2, 1)
 
     if isinstance(prompt, str):
         prompt = [prompt]
@@ -122,25 +123,25 @@ def denoise(
     # this is ignored for schnell
     guidance_vec = torch.full((img.shape[0],), guidance, device=img.device, dtype=img.dtype)
     t_0_vec = torch.full((img.shape[0],), timesteps[-1], dtype=img.dtype, device=img.device)
-    img, _ = img.chunk(2, dim=1) if cond_latent is not None else (img, None)
+    # img, _ = img.chunk(2, dim=1) if cond_latent is not None else (img, None)
 
     for t_curr, t_prev in zip(timesteps[:-1], timesteps[1:]):
         t_vec = torch.full((img.shape[0],), t_curr, dtype=img.dtype, device=img.device)
         if cond_latent is not None:
             _, c, h, w = cond_latent.shape
             assert h * w // 4 == img.shape[1] and c * 4 == img.shape[2]  # tianshuo
-            img = rearrange(img, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h // 2, w=w // 2, ph=2, pw=2)
-            # cond = rearrange(cond_latent, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
-            
+            # img = rearrange(img, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h // 2, w=w // 2, ph=2, pw=2)
+            cond = rearrange(cond_latent, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+
             if is_generation:
-                img = torch.cat((img, cond_latent.to(img.dtype)), dim=3)
-                img = rearrange(img, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+                img = torch.cat((img, cond.to(img.dtype)), dim=1)
+                # img = rearrange(img, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
                 # img = torch.cat((img, cond.to(img.dtype)), dim=1)
                 t1 = t_vec
                 t2 = t_0_vec
             else:
-                img = torch.cat((cond_latent.to(img.dtype), img), dim=3)
-                img = rearrange(img, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+                img = torch.cat((cond.to(img.dtype), img), dim=1)
+                # img = rearrange(img, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
                 # img = torch.cat((cond.to(img.dtype), img), dim=1)
                 t1 = t_0_vec
                 t2 = t_vec
@@ -173,16 +174,16 @@ def denoise(
             pred = neg_pred + true_gs * (pred - neg_pred)
         
         if cond_latent is not None:
-            img = rearrange(img, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h // 2, w=w, ph=2, pw=2)
-            pred = rearrange(pred, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h // 2, w=w, ph=2, pw=2)
+            # img = rearrange(img, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h // 2, w=w, ph=2, pw=2)
+            # pred = rearrange(pred, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h // 2, w=w, ph=2, pw=2)
             if is_generation:
-                img, _ = img.chunk(2, dim=3)
-                pred, _ = pred.chunk(2, dim=3)
+                img = img.chunk(2, dim=1)[0]
+                pred = pred.chunk(2, dim=1)[0]
             else:
-                _, img = img.chunk(2, dim=3)
-                _, pred = pred.chunk(2, dim=3)
-            img = rearrange(img, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
-            pred = rearrange(pred, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+                img = img.chunk(2, dim=1)[1]
+                pred = pred.chunk(2, dim=1)[1]
+            # img = rearrange(img, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+            # pred = rearrange(pred, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
 
         img = img + (t_prev - t_curr) * pred
         i += 1

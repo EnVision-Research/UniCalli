@@ -182,35 +182,23 @@ class DoubleStreamBlockLoraProcessor(nn.Module):
         self.qkv_lora2 = LoRALinearLayer(dim, dim * 3, rank, network_alpha)
         self.proj_lora2 = LoRALinearLayer(dim, dim, rank, network_alpha)
         self.lora_weight = lora_weight
-        self.h = 80  # tianshuo
-        self.w = 16
 
     def forward(self, attn, img, txt, vec, vec2, pe, **attention_kwargs):
         img_mod1, img_mod2 = attn.img_mod(vec)
         txt_mod1, txt_mod2 = attn.txt_mod(vec)
-
-        def prepare_adaln(p1, p2, s):
-            p1 = p1.repeat(1, s//2, 1)
-            p2 = p2.repeat(1, s//2, 1)
-            
-            p1 = rearrange(p1, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=self.h//2, w=self.w//2, ph=2, pw=2)
-            p2 = rearrange(p2, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=self.h//2, w=self.w//2, ph=2, pw=2)
-            p = torch.cat([p1, p2], dim=3)
-            return rearrange(p, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
-            
 
         if vec2 is not None:   # tianshuo
             img_mod1_2, img_mod2_2 = attn.img_mod(vec2)
             txt_mod1_2, txt_mod2_2 = attn.txt_mod(vec2)
             
             s = img.shape[1]  # Spatial上cat
-            img_mod1.scale = prepare_adaln(img_mod1.scale, img_mod1_2.scale, s)
-            img_mod1.shift = prepare_adaln(img_mod1.shift, img_mod1_2.shift, s)
-            img_mod1.gate = prepare_adaln(img_mod1.gate, img_mod1_2.gate, s)
+            img_mod1.scale = torch.cat([img_mod1.scale.repeat(1, s//2, 1), img_mod1_2.scale.repeat(1, s//2, 1)], dim=1)
+            img_mod1.shift = torch.cat([img_mod1.shift.repeat(1, s//2, 1), img_mod1_2.shift.repeat(1, s//2, 1)], dim=1)
+            img_mod1.gate = torch.cat([img_mod1.gate.repeat(1, s//2, 1), img_mod1_2.gate.repeat(1, s//2, 1)], dim=1)
 
-            img_mod2.scale = prepare_adaln(img_mod2.scale, img_mod2_2.scale, s)
-            img_mod2.shift = prepare_adaln(img_mod2.shift, img_mod2_2.shift, s)
-            img_mod2.gate = prepare_adaln(img_mod2.gate, img_mod2_2.gate, s)
+            img_mod2.scale = torch.cat([img_mod2.scale.repeat(1, s//2, 1), img_mod2_2.scale.repeat(1, s//2, 1)], dim=1)
+            img_mod2.shift = torch.cat([img_mod2.shift.repeat(1, s//2, 1), img_mod2_2.shift.repeat(1, s//2, 1)], dim=1)
+            img_mod2.gate = torch.cat([img_mod2.gate.repeat(1, s//2, 1), img_mod2_2.gate.repeat(1, s//2, 1)], dim=1)
 
             s = txt.shape[1]
             txt_mod1.scale = torch.cat([txt_mod1.scale.repeat(1, s//2, 1), txt_mod1_2.scale.repeat(1, s//2, 1)], dim=1)
@@ -338,6 +326,28 @@ class DoubleStreamBlockProcessor:
     def __call__(self, attn, img, txt, vec, vec2, pe, **attention_kwargs):
         img_mod1, img_mod2 = attn.img_mod(vec)
         txt_mod1, txt_mod2 = attn.txt_mod(vec)
+
+        if vec2 is not None:   # tianshuo
+            img_mod1_2, img_mod2_2 = attn.img_mod(vec2)
+            txt_mod1_2, txt_mod2_2 = attn.txt_mod(vec2)
+            
+            s = img.shape[1]  # Spatial上cat
+            img_mod1.scale = torch.cat([img_mod1.scale.repeat(1, s//2, 1), img_mod1_2.scale.repeat(1, s//2, 1)], dim=1)
+            img_mod1.shift = torch.cat([img_mod1.shift.repeat(1, s//2, 1), img_mod1_2.shift.repeat(1, s//2, 1)], dim=1)
+            img_mod1.gate = torch.cat([img_mod1.gate.repeat(1, s//2, 1), img_mod1_2.gate.repeat(1, s//2, 1)], dim=1)
+
+            img_mod2.scale = torch.cat([img_mod2.scale.repeat(1, s//2, 1), img_mod2_2.scale.repeat(1, s//2, 1)], dim=1)
+            img_mod2.shift = torch.cat([img_mod2.shift.repeat(1, s//2, 1), img_mod2_2.shift.repeat(1, s//2, 1)], dim=1)
+            img_mod2.gate = torch.cat([img_mod2.gate.repeat(1, s//2, 1), img_mod2_2.gate.repeat(1, s//2, 1)], dim=1)
+
+            s = txt.shape[1]
+            txt_mod1.scale = torch.cat([txt_mod1.scale.repeat(1, s//2, 1), txt_mod1_2.scale.repeat(1, s//2, 1)], dim=1)
+            txt_mod1.shift = torch.cat([txt_mod1.shift.repeat(1, s//2, 1), txt_mod1_2.shift.repeat(1, s//2, 1)], dim=1)
+            txt_mod1.gate = torch.cat([txt_mod1.gate.repeat(1, s//2, 1), txt_mod1_2.gate.repeat(1, s//2, 1)], dim=1)
+
+            txt_mod2.scale = torch.cat([txt_mod2.scale.repeat(1, s//2, 1), txt_mod2_2.scale.repeat(1, s//2, 1)], dim=1)
+            txt_mod2.shift = torch.cat([txt_mod2.shift.repeat(1, s//2, 1), txt_mod2_2.shift.repeat(1, s//2, 1)], dim=1)
+            txt_mod2.gate = torch.cat([txt_mod2.gate.repeat(1, s//2, 1), txt_mod2_2.gate.repeat(1, s//2, 1)], dim=1)
 
         # prepare image for attention
         img_modulated = attn.img_norm1(img)
@@ -500,6 +510,13 @@ class SingleStreamBlockLoraProcessor(nn.Module):
     def forward(self, attn: nn.Module, x: Tensor, vec: Tensor, vec2: Tensor, pe: Tensor) -> Tensor:
 
         mod, _ = attn.modulation(vec)
+        if vec2 is not None:   # tianshuo
+            mod_2, _ = attn.modulation(vec)
+            s = x.shape[1]  # Spatial上cat
+            mod.scale = torch.cat([mod.scale.repeat(1, s//2, 1), mod_2.scale.repeat(1, s//2, 1)], dim=1)
+            mod.shift = torch.cat([mod.shift.repeat(1, s//2, 1), mod_2.shift.repeat(1, s//2, 1)], dim=1)
+            mod.gate = torch.cat([mod.gate.repeat(1, s//2, 1), mod_2.gate.repeat(1, s//2, 1)], dim=1)
+            
         x_mod = (1 + mod.scale) * attn.pre_norm(x) + mod.shift
         qkv, mlp = torch.split(attn.linear1(x_mod), [3 * attn.hidden_size, attn.mlp_hidden_dim], dim=-1)
         qkv = qkv + self.qkv_lora(x_mod) * self.lora_weight
@@ -521,6 +538,13 @@ class SingleStreamBlockProcessor:
     def __call__(self, attn: nn.Module, x: Tensor, vec: Tensor, vec2: Tensor, pe: Tensor) -> Tensor:
 
         mod, _ = attn.modulation(vec)
+        if vec2 is not None:   # tianshuo
+            mod_2, _ = attn.modulation(vec)
+            s = x.shape[1]  # Spatial上cat
+            mod.scale = torch.cat([mod.scale.repeat(1, s//2, 1), mod_2.scale.repeat(1, s//2, 1)], dim=1)
+            mod.shift = torch.cat([mod.shift.repeat(1, s//2, 1), mod_2.shift.repeat(1, s//2, 1)], dim=1)
+            mod.gate = torch.cat([mod.gate.repeat(1, s//2, 1), mod_2.gate.repeat(1, s//2, 1)], dim=1)
+
         x_mod = (1 + mod.scale) * attn.pre_norm(x) + mod.shift
         qkv, mlp = torch.split(attn.linear1(x_mod), [3 * attn.hidden_size, attn.mlp_hidden_dim], dim=-1)
 
@@ -603,7 +627,17 @@ class LastLayer(nn.Module):
 
     def forward(self, x: Tensor, vec: Tensor, vec2: Tensor) -> Tensor:
         shift, scale = self.adaLN_modulation(vec).chunk(2, dim=1)
-        x = (1 + scale[:, None, :]) * self.norm_final(x) + shift[:, None, :]
+        shift = shift[:, None, :]
+        scale = scale[:, None, :]
+        if vec2 is not None:
+            shift2, scale2 = self.adaLN_modulation(vec2).chunk(2, dim=1)
+            shift2 = shift2[:, None, :]
+            scale2 = scale2[:, None, :]
+            
+            s = x.shape[1]
+            shift = torch.cat([shift.repeat(1, s//2, 1), shift2.repeat(1, s//2, 1)], dim=1)
+            scale = torch.cat([scale.repeat(1, s//2, 1), scale2.repeat(1, s//2, 1)], dim=1)
+        x = (1 + scale) * self.norm_final(x) + shift
         x = self.linear(x)
         return x
 

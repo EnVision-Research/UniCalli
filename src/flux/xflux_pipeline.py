@@ -298,7 +298,7 @@ class XFluxPipeline:
                 self.t5, self.clip = self.t5.to(self.device), self.clip.to(self.device)
 
             if not self.controlnet_loaded and controlnet_image is not None:  # tianshuo
-                width //= 2
+                # width //= 2
                 cond_latent = self.ae.encode(controlnet_image.to(self.device, dtype=torch.float32))
 
             inp_cond = prepare(t5=self.t5, clip=self.clip, img=x, prompt=prompt)

@@ -2,11 +2,13 @@ import argparse
 import logging
 import math
 import os
+import re
 import random
 import shutil
 from contextlib import nullcontext
 from pathlib import Path
 
+from PIL import Image
 import accelerate
 import datasets
 import numpy as np
@@ -37,6 +39,7 @@ from einops import rearrange
 from src.flux.sampling import denoise, get_noise, get_schedule, prepare, unpack
 from src.flux.util import (configs, load_ae, load_clip,
                        load_flow_model2, load_t5)
+from src.flux.xflux_pipeline import XFluxSampler
 from image_datasets.dataset import loader
 if is_wandb_available():
     import wandb
@@ -98,6 +101,7 @@ def main():
     if accelerator.is_main_process:
         if args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
+            os.makedirs(os.path.join(args.output_dir, 'validation'), exist_ok=True)
 
     dit, vae, t5, clip = get_models(name=args.model_name, device=accelerator.device, offload=False, is_schnell=is_schnell)
 
@@ -112,7 +116,7 @@ def main():
         if 'txt_attn' not in n:
             param.requires_grad = False
 
-    print(sum([p.numel() for p in dit.parameters() if p.requires_grad]) / 1000000, 'parameters')
+    print(sum([p.numel() for p in dit.parameters() if p.requires_grad]) / 1000000, 'M parameters')
     optimizer = optimizer_cls(
         [p for p in dit.parameters() if p.requires_grad],
         lr=args.learning_rate,
@@ -210,21 +214,50 @@ def main():
         disable=not accelerator.is_local_main_process,
     )
 
+    print_shape_flag = True
     for epoch in range(first_epoch, args.num_train_epochs):
         train_loss = 0.0
         for step, batch in enumerate(train_dataloader):
             with accelerator.accumulate(dit):
-                img, prompts = batch
+                img, prompts, cond_image = batch
+
+                if print_shape_flag:
+                    print_shape_flag = False
+                    print(f"img shape: {img.shape}")
+                    print(f"cond_image shape: {cond_image.shape}")
+                    print(f"prompts: {prompts}")
+
+                cond_image = cond_image.to(accelerator.device)
                 with torch.no_grad():
                     x_1 = vae.encode(img.to(accelerator.device).to(torch.float32))
+                    cond_latent = vae.encode(cond_image.to(torch.float32))
+                    # inp = prepare(t5=t5, clip=clip, 
+                    #     img=torch.cat((x_1, cond_latent), dim=3), prompt=prompts)
                     inp = prepare(t5=t5, clip=clip, img=x_1, prompt=prompts)
-                    x_1 = rearrange(x_1, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
-
 
                 bs = img.shape[0]
-                t = torch.sigmoid(torch.randn((bs,), device=accelerator.device))
+                mode = random.choice(['cond', 'img'])
+                if mode == 'img':  # pred cond, by given pure img
+                    t = torch.sigmoid(torch.randn((1,), device=accelerator.device))
+                    t_cond = torch.zeros_like(t).to(accelerator.device)
+                else:
+                    t_cond = torch.sigmoid(torch.randn((1,), device=accelerator.device))
+                    t = torch.zeros_like(t_cond).to(accelerator.device)
+                    
                 x_0 = torch.randn_like(x_1).to(accelerator.device)
                 x_t = (1 - t) * x_1 + t * x_0
+                b, c, h, w = x_t.shape
+                
+                cond_0 = torch.randn_like(cond_latent).to(accelerator.device)
+                cond_t = (1 - t_cond) * cond_latent + t_cond * cond_0
+                # x_t = torch.cat((x_t, cond_t), dim=3)
+                
+                x_t = rearrange(x_t, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+                cond_t = rearrange(cond_t, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+                x_t = torch.cat((x_t, cond_t), dim=1)
+                # b, c, h, w = x_t.shape
+                # x_t = rearrange(x_t, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+
                 bsz = x_1.shape[0]
                 guidance_vec = torch.full((x_t.shape[0],), 4, device=x_t.device, dtype=x_t.dtype)
 
@@ -235,10 +268,18 @@ def main():
                                 txt_ids=inp['txt_ids'].to(weight_dtype),
                                 y=inp['vec'].to(weight_dtype),
                                 timesteps=t.to(weight_dtype),
+                                timesteps2=t_cond.to(weight_dtype),
                                 guidance=guidance_vec.to(weight_dtype),)
 
-                #loss = F.mse_loss(model_pred.float(), (x_1 - x_0).float(), reduction="mean")
-                loss = F.mse_loss(model_pred.float(), (x_0 - x_1).float(), reduction="mean")
+                img_pred, cond_pred = model_pred.chunk(2, dim=1)
+                img_pred = rearrange(img_pred, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h//2, w=w//2, ph=2, pw=2)
+                cond_pred = rearrange(cond_pred, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h//2, w=w//2, ph=2, pw=2)
+
+                loss_img = F.mse_loss(img_pred.float(), (x_0 - x_1).float(), reduction="mean")
+                loss_cond = F.mse_loss(cond_pred.float(), (cond_0 - cond_latent).float(), reduction="mean")
+                
+                loss = loss_img if mode == 'img' else loss_cond
+                # loss = F.mse_loss(model_pred.float(), (x_0 - x_1).float(), reduction="mean")
 
                 # Gather the losses across all processes for logging (if we use distributed training).
                 avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()
@@ -258,6 +299,43 @@ def main():
                 global_step += 1
                 accelerator.log({"train_loss": train_loss}, step=global_step)
                 train_loss = 0.0
+
+                if not args.disable_sampling and global_step % args.sample_every == 0:
+                    if accelerator.is_main_process:
+                        print(f"Sampling images for step {global_step}...")
+                        sampler = XFluxSampler(clip=clip, t5=t5, ae=vae, model=dit, device=accelerator.device)
+                        images = []
+                        for i, prompt in enumerate(args.sample_prompts):
+                            if i < len(args.sample_prompts) // 2:
+                                # generation
+                                idx = i
+                                cond_image = Image.open(f'test_data_gen/cond_{idx}.png')
+                                # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
+                                result = sampler(prompt=prompt,
+                                                width=args.sample_width,
+                                                height=args.sample_height,
+                                                num_steps=args.sample_steps,
+                                                controlnet_image=cond_image,
+                                                is_generation=True
+                                                )
+                                images.append(wandb.Image(result))
+                                result.save(f"{args.output_dir}/validation/{global_step}_gen_{idx}.png")
+                            else:
+                                # recognition
+                                idx = i - len(args.sample_prompts) // 2
+                                cond_image = Image.open(f'test_data_rec/img_{idx}.png')
+                                # cond_image = Image.open(f'test_data_gen/cond_{idx}.png')
+                                result = sampler(prompt=prompt,
+                                                width=args.sample_width,
+                                                height=args.sample_height,
+                                                num_steps=args.sample_steps,
+                                                controlnet_image=cond_image,
+                                                is_generation=False
+                                                )
+                                images.append(wandb.Image(result))
+                                result.save(f"{args.output_dir}/validation/{global_step}_rec_{idx}.png")
+
+                        wandb.log({f"Results, step {global_step}": images})
 
                 if global_step % args.checkpointing_steps == 0:
                     if accelerator.is_main_process:

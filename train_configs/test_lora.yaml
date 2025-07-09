@@ -29,7 +29,7 @@ single_blocks: "1,2,3,4"
 double_blocks: null
 disable_sampling: false
 sample_every: 5000 # sample every this many steps
-sample_width: 256
+sample_width: 128
 sample_height: 640
 sample_steps: 20
 sample_prompts:
