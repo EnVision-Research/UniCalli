@@ -41,6 +41,7 @@ from src.flux.util import (configs, load_ae, load_clip,
                        load_flow_model2, load_t5)
 from src.flux.xflux_pipeline import XFluxSampler
 from image_datasets.dataset import loader
+
 if is_wandb_available():
     import wandb
 logger = get_logger(__name__, log_level="INFO")
@@ -63,11 +64,9 @@ def parse_args():
         help="path to config",
     )
     args = parser.parse_args()
-
-
     return args.config
-def main():
 
+def main():
     args = OmegaConf.load(parse_args())
     is_schnell = args.model_name == "flux-schnell"
     logging_dir = os.path.join(args.output_dir, args.logging_dir)
@@ -105,6 +104,7 @@ def main():
 
     dit, vae, t5, clip = get_models(name=args.model_name, device=accelerator.device, offload=False, is_schnell=is_schnell)
 
+    dit.init_module_embeddings(320)
     vae.requires_grad_(False)
     t5.requires_grad_(False)
     clip.requires_grad_(False)
@@ -113,8 +113,12 @@ def main():
     optimizer_cls = torch.optim.AdamW
     #you can train your own layers
     for n, param in dit.named_parameters():
-        if 'txt_attn' not in n:
-            param.requires_grad = False
+        param.requires_grad = True
+        # if 'txt_attn' not in n:
+        #     param.requires_grad = False
+        # if 'attn' not in n:
+        #     param.requires_grad = False
+    # dit.module_embeddings.requires_grad_(True)
 
     print(sum([p.numel() for p in dit.parameters() if p.requires_grad]) / 1000000, 'M parameters')
     optimizer = optimizer_cls(
@@ -161,13 +165,13 @@ def main():
             initial_global_step = 0
         else:
             accelerator.print(f"Resuming from checkpoint {path}")
-            dit_state = torch.load(os.path.join(args.output_dir, path, 'dit.bin'), map_location='cpu')
+            dit_state = torch.load(os.path.join(args.output_dir, path, 'dit.bin'), map_location='cpu', weights_only=False)
             dit_state2 = {}
             for k in dit_state.keys():
                 dit_state2[k[len('module.'):]] = dit_state[k]
             dit.load_state_dict(dit_state2)
-            optimizer_state = torch.load(os.path.join(args.output_dir, path, 'optimizer.bin'), map_location='cpu')['base_optimizer_state']
-            optimizer.load_state_dict(optimizer_state)
+            # optimizer_state = torch.load(os.path.join(args.output_dir, path, 'optimizer.bin'), map_location='cpu', weights_only=False)
+            # optimizer.load_state_dict(optimizer_state['base_optimizer_state'])
 
             global_step = int(path.split("-")[1])
 
@@ -236,7 +240,8 @@ def main():
                     inp = prepare(t5=t5, clip=clip, img=x_1, prompt=prompts)
 
                 bs = img.shape[0]
-                mode = random.choice(['cond', 'img'])
+                # mode = random.choice(['cond', 'img'])
+                mode = 'img'
                 if mode == 'img':  # pred cond, by given pure img
                     t = torch.sigmoid(torch.randn((1,), device=accelerator.device))
                     t_cond = torch.zeros_like(t).to(accelerator.device)
@@ -306,35 +311,33 @@ def main():
                         sampler = XFluxSampler(clip=clip, t5=t5, ae=vae, model=dit, device=accelerator.device)
                         images = []
                         for i, prompt in enumerate(args.sample_prompts):
-                            if i < len(args.sample_prompts) // 2:
-                                # generation
-                                idx = i
-                                cond_image = Image.open(f'test_data_gen/cond_{idx}.png')
-                                # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
-                                result = sampler(prompt=prompt,
-                                                width=args.sample_width,
-                                                height=args.sample_height,
-                                                num_steps=args.sample_steps,
-                                                controlnet_image=cond_image,
-                                                is_generation=True
-                                                )
-                                images.append(wandb.Image(result))
-                                result.save(f"{args.output_dir}/validation/{global_step}_gen_{idx}.png")
-                            else:
-                                # recognition
-                                idx = i - len(args.sample_prompts) // 2
-                                cond_image = Image.open(f'test_data_rec/img_{idx}.png')
-                                # cond_image = Image.open(f'test_data_gen/cond_{idx}.png')
-                                result = sampler(prompt=prompt,
-                                                width=args.sample_width,
-                                                height=args.sample_height,
-                                                num_steps=args.sample_steps,
-                                                controlnet_image=cond_image,
-                                                is_generation=False
-                                                )
-                                images.append(wandb.Image(result))
-                                result.save(f"{args.output_dir}/validation/{global_step}_rec_{idx}.png")
-
+                            # generation
+                            idx = i
+                            cond_image = Image.open(f'test_data_all/test_cn_2/cond_{idx}.png')
+                            # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
+                            result = sampler(prompt=prompt,
+                                            width=args.sample_width,
+                                            height=args.sample_height,
+                                            num_steps=args.sample_steps,
+                                            controlnet_image=cond_image,
+                                            is_generation=True
+                                            )
+                            images.append(wandb.Image(result))
+                            result.save(f"{args.output_dir}/validation/{global_step}_gen_{idx}.png")
+                        # for i, prompt in enumerate(args.sample_prompts):
+                        #     # generation
+                        #     idx = i
+                        #     cond_image = Image.open(f'test_data_all/test_cn/img_{idx}.png')
+                        #     # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
+                        #     result = sampler(prompt=prompt,
+                        #                     width=args.sample_width,
+                        #                     height=args.sample_height,
+                        #                     num_steps=args.sample_steps,
+                        #                     controlnet_image=cond_image,
+                        #                     is_generation=False
+                        #                     )
+                        #     images.append(wandb.Image(result))
+                        #     result.save(f"{args.output_dir}/validation/{global_step}_rec_{idx}.png")
                         wandb.log({f"Results, step {global_step}": images})
 
                 if global_step % args.checkpointing_steps == 0:

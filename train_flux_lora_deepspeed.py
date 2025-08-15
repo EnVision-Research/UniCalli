@@ -252,7 +252,19 @@ def main():
         train_loss = 0.0
         for step, batch in enumerate(train_dataloader):
             with accelerator.accumulate(dit):
-                img, prompts, cond_image = batch
+                # pattern = random.choice(['generation', 'recognition'])
+                pattern = 'generation'
+                if pattern == 'generation':
+                    img, prompts, cond_image = batch
+                else:
+                    cond_image, prompts, img = batch
+
+                prompts = list(prompts)
+                if isinstance(prompts, str):
+                    prompts = [prompts]
+
+                for i in range(len(prompts)):
+                    prompts[i] = (f'<mode> {pattern} </mode> ' + prompts[i]) * 5   # repeat the prompt 5 times, tianshuo
 
                 if print_shape_flag:
                     print_shape_flag = False
@@ -264,34 +276,17 @@ def main():
                 with torch.no_grad():
                     x_1 = vae.encode(img.to(accelerator.device).to(torch.float32))
                     cond_latent = vae.encode(cond_image.to(torch.float32))
-                    # inp = prepare(t5=t5, clip=clip, 
-                    #     img=torch.cat((x_1, cond_latent), dim=3), prompt=prompts)
                     inp = prepare(t5=t5, clip=clip, img=x_1, prompt=prompts)
 
-                bs = img.shape[0]
-                mode = random.choice(['cond', 'img'])
-                if mode == 'img':  # pred cond, by given pure img
-                    t = torch.tensor([timesteps[random.randint(0, 999)]]).to(accelerator.device)
-                    t_cond = torch.tensor([timesteps[-1]]).to(accelerator.device)
-                else:
-                    t = torch.tensor([timesteps[-1]]).to(accelerator.device)
-                    t_cond = torch.tensor([timesteps[random.randint(0, 999)]]).to(accelerator.device)
-                
-                x_0 = torch.randn_like(x_1).to(accelerator.device)
-                x_t = (1 - t) * x_1 + t * x_0 if mode == 'img' else x_1
-                b, c, h, w = x_t.shape
-                
-                cond_0 = torch.randn_like(cond_latent).to(accelerator.device)
-                cond_t = (1 - t_cond) * cond_latent + t_cond * cond_0 if mode == 'cond' else cond_latent
-                # x_t = torch.cat((x_t, cond_t), dim=3)
-                
-                x_t = rearrange(x_t, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
-                cond_t = rearrange(cond_t, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
-                x_t = torch.cat((x_t, cond_t), dim=1)
-                # b, c, h, w = x_t.shape
-                # x_t = rearrange(x_t, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+                t = torch.tensor([timesteps[random.randint(0, 999)]]).to(accelerator.device)
 
-                bsz = x_1.shape[0]
+                x_0 = torch.randn_like(x_1).to(accelerator.device)
+                x_t = (1 - t) * x_1 + t * x_0
+                
+                x_t = torch.cat((x_t, cond_latent), dim=3)
+                b, c, h, w = x_t.shape
+                x_t = rearrange(x_t, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+
                 guidance_vec = torch.full((x_t.shape[0],), 1, device=x_t.device, dtype=x_t.dtype)
                 # Predict the noise residual and compute loss
                 model_pred = dit(img=x_t.to(weight_dtype),
@@ -300,60 +295,11 @@ def main():
                                 txt_ids=inp['txt_ids'].to(weight_dtype),
                                 y=inp['vec'].to(weight_dtype),
                                 timesteps=t.to(weight_dtype),
-                                timesteps2=t_cond.to(weight_dtype),
                                 guidance=guidance_vec.to(weight_dtype),)
 
-                # model_pred = rearrange(model_pred, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h//2, w=w//2, ph=2, pw=2)
-                img_pred, cond_pred = model_pred.chunk(2, dim=1)
-                img_pred = rearrange(img_pred, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h//2, w=w//2, ph=2, pw=2)
-                cond_pred = rearrange(cond_pred, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h//2, w=w//2, ph=2, pw=2)
-
-                loss_img = F.mse_loss(img_pred.float(), (x_0 - x_1).float(), reduction="mean")
-                loss_cond = F.mse_loss(cond_pred.float(), (cond_0 - cond_latent).float(), reduction="mean")
-                
-                if mode == 'img':
-                    loss = loss_img + 0.01 * loss_cond
-                else:
-                    loss = loss_cond + 0.01 * loss_img
-
-                # ------------------- cycle consistency loss ------------------- #
-                # if mode == 'img':
-                #     x_cycle = img_pred + x_0  # as clean img input (condition)
-                #     t = torch.tensor([timesteps[0]]).to(accelerator.device)
-                #     t_cond = torch.tensor([timesteps[random.randint(0, 999)]]).to(accelerator.device)
-                #     cond_0 = torch.randn_like(cond_latent).to(accelerator.device)
-                #     cond_t = (1 - t_cond) * cond_latent + t_cond * cond_0
-                #     x_t = torch.cat((x_cycle, cond_t), dim=3)
-                # else:
-                #     cond_cycle = cond_pred + cond_0
-                #     t = torch.tensor([timesteps[random.randint(0, 999)]]).to(accelerator.device)
-                #     t_cond = torch.tensor([timesteps[0]]).to(accelerator.device)
-                #     x_0 = torch.randn_like(x_1).to(accelerator.device)
-                #     x_t = (1 - t) * x_1 + t * x_0
-                #     x_t = torch.cat((x_t, cond_cycle), dim=3)
-
-                # b, c, h, w = x_t.shape
-                # x_t = rearrange(x_t, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
-
-                # bsz = x_1.shape[0]
-                # guidance_vec = torch.full((x_t.shape[0],), 1, device=x_t.device, dtype=x_t.dtype)
-                # # Predict the noise residual and compute loss
-                # model_pred = dit(img=x_t.to(weight_dtype),
-                #                 img_ids=inp['img_ids'].to(weight_dtype),
-                #                 txt=inp['txt'].to(weight_dtype),
-                #                 txt_ids=inp['txt_ids'].to(weight_dtype),
-                #                 y=inp['vec'].to(weight_dtype),
-                #                 timesteps=t.to(weight_dtype),
-                #                 timesteps2=t_cond.to(weight_dtype),
-                #                 guidance=guidance_vec.to(weight_dtype),)
-
-                # model_pred = rearrange(model_pred, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h//2, w=w//2, ph=2, pw=2)
-                # img_pred_cycle, cond_pred_cycle = model_pred.chunk(2, dim=-1)
-
-                # if mode == 'cond':
-                #     loss += 0.3 * F.mse_loss(img_pred_cycle.float(), (x_0 - x_1).float(), reduction="mean")
-                # else:
-                #     loss += 0.3 * F.mse_loss(cond_pred_cycle.float(), (cond_0 - cond_latent).float(), reduction="mean")
+                model_pred = rearrange(model_pred, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h//2, w=w//2, ph=2, pw=2)
+                model_pred = model_pred.chunk(2, dim=3)[0]
+                loss = F.mse_loss(model_pred.float(), (x_0 - x_1).float(), reduction="mean")
 
                 # Gather the losses across all processes for logging (if we use distributed training).
                 avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()
@@ -375,40 +321,35 @@ def main():
                 train_loss = 0.0
 
                 if not args.disable_sampling and global_step % args.sample_every == 0:
+                    data_path = 'test_data'
                     if accelerator.is_main_process:
                         print(f"Sampling images for step {global_step}...")
                         sampler = XFluxSampler(clip=clip, t5=t5, ae=vae, model=dit, device=accelerator.device)
                         images = []
                         for i, prompt in enumerate(args.sample_prompts):
-                            if i < len(args.sample_prompts) // 2:
-                                # generation
-                                idx = i
-                                # cond_image = Image.open(f'test_data_gen/cond_{idx}.png')
-                                cond_image = Image.open(f'test_data_rec/img_{idx}.png')
-                                result = sampler(prompt=prompt,
-                                                width=args.sample_width,
-                                                height=args.sample_height,
-                                                num_steps=args.sample_steps,
-                                                controlnet_image=cond_image,
-                                                is_generation=True
-                                                )
-                                images.append(wandb.Image(result))
-                                result.save(f"{args.output_dir}/validation/{global_step}_gen_{idx}.png")
-                            else:
-                                # recognition
-                                idx = i - len(args.sample_prompts) // 2
-                                # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
-                                cond_image = Image.open(f'test_data_gen/cond_{idx}.png')
-                                result = sampler(prompt=prompt,
-                                                width=args.sample_width,
-                                                height=args.sample_height,
-                                                num_steps=args.sample_steps,
-                                                controlnet_image=cond_image,
-                                                is_generation=False
-                                                )
-                                images.append(wandb.Image(result))
-                                result.save(f"{args.output_dir}/validation/{global_step}_rec_{idx}.png")
+                            cond_image = Image.open(f'{data_path}/cond_{i}.png')
+                            pattern = 'generation'
+                            _prompt = (f'<mode> {pattern} </mode> ' + prompt) * 5
+                            result = sampler(prompt=_prompt,
+                                             width=args.sample_width,
+                                             height=args.sample_height,
+                                             num_steps=args.sample_steps,
+                                             controlnet_image=cond_image
+                                             )
+                            images.append(wandb.Image(result))
+                            result.save(f"{args.output_dir}/validation/{global_step}_gen_{i}.png")
 
+                            # cond_image = Image.open(f'{data_path}/img_{i}.png')
+                            # pattern = 'recognition'
+                            # _prompt = f'<mode> {pattern} </mode> ' + prompt 
+                            # result = sampler(prompt=_prompt,
+                            #                  width=args.sample_width,
+                            #                  height=args.sample_height,
+                            #                  num_steps=args.sample_steps,
+                            #                  controlnet_image=cond_image
+                            #                  )
+                            # images.append(wandb.Image(result))
+                            # result.save(f"{args.output_dir}/validation/{global_step}_rec_{i}.png")
                         wandb.log({f"Results, step {global_step}": images})
 
                 if global_step % args.checkpointing_steps == 0:

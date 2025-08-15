@@ -8,7 +8,6 @@ from torch import Tensor
 from .model import Flux
 from .modules.conditioner import HFEmbedder
 
-
 def get_noise(
     num_samples: int,
     height: int,
@@ -29,42 +28,44 @@ def get_noise(
     )
 
 
-# def prepare(t5: HFEmbedder, clip: HFEmbedder, processor, img: Tensor, prompt: str | list[str]) -> dict[str, Tensor]:
-#     bs, c, h, w = img.shape
-#     if bs == 1 and not isinstance(prompt, str):
-#         bs = len(prompt)
+def prepare(t5: HFEmbedder, clip: HFEmbedder, img: Tensor, prompt: str | list[str]) -> dict[str, Tensor]:
+    bs, c, h, w = img.shape
+    if bs == 1 and not isinstance(prompt, str):
+        bs = len(prompt)
 
-#     img = rearrange(img, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
-#     if img.shape[0] == 1 and bs > 1:
-#         img = repeat(img, "1 ... -> bs ...", bs=bs)
+    img = rearrange(img, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
 
-#     img_ids = torch.zeros(h // 2, w // 2, 3)
-#     img_ids[..., 1] = img_ids[..., 1] + torch.arange(h // 2)[:, None]
-#     img_ids[..., 2] = img_ids[..., 2] + torch.arange(w // 2)[None, :]
-#     img_ids = repeat(img_ids, "h w c -> b (h w) c", b=bs)
+    if img.shape[0] == 1 and bs > 1:
+        img = repeat(img, "1 ... -> bs ...", bs=bs)
 
-#     if isinstance(prompt, str):
-#         prompt = [prompt]
-#     txt = t5(prompt)
-#     if txt.shape[0] == 1 and bs > 1:
-#         txt = repeat(txt, "1 ... -> bs ...", bs=bs)
-#     txt_ids = torch.zeros(bs, txt.shape[1], 3)
+    img_ids = torch.zeros(h // 2, w // 2, 3)
+    img_ids[..., 1] = img_ids[..., 1] + torch.arange(h // 2)[:, None]
+    img_ids[..., 2] = img_ids[..., 2] + torch.arange(w // 2)[None, :]
 
-#     # vec = clip(prompt)  # [1, 768]
-#     c_inputs = processor(text=prompt, padding=True, return_tensors="pt")
-#     vec = clip.get_text_features(**c_inputs)  # clip must be the chinese clip in here
-#     vec = vec / vec.norm(p=2, dim=-1, keepdim=True) 
-#     vec = vec[:, :768]  # for early testing, align with the original clip model
-#     if vec.shape[0] == 1 and bs > 1:
-#         vec = repeat(vec, "1 ... -> bs ...", bs=bs)
+    img_ids_2 = img_ids.clone()
+    img_ids_2[:, :, 0] += 1
 
-#     return {
-#         "img": img,
-#         "img_ids": img_ids.to(img.device),
-#         "txt": txt.to(img.device),
-#         "txt_ids": txt_ids.to(img.device),
-#         "vec": vec.to(img.device),
-#     }
+    img_ids = torch.cat([img_ids, img_ids_2], dim=1)
+    img_ids = repeat(img_ids, "h w c -> b (h w) c", b=bs)
+
+    if isinstance(prompt, str):
+        prompt = [prompt]
+    txt = t5(prompt)
+    if txt.shape[0] == 1 and bs > 1:
+        txt = repeat(txt, "1 ... -> bs ...", bs=bs)
+    txt_ids = torch.zeros(bs, txt.shape[1], 3)
+
+    vec = clip(prompt)
+    if vec.shape[0] == 1 and bs > 1:
+        vec = repeat(vec, "1 ... -> bs ...", bs=bs)
+
+    return {
+        "img": img,
+        "img_ids": img_ids.to(img.device),
+        "txt": txt.to(img.device),
+        "txt_ids": txt_ids.to(img.device),
+        "vec": vec.to(img.device),
+    }
 
 
 def time_shift(mu: float, sigma: float, t: Tensor):
@@ -112,19 +113,29 @@ def denoise(
     # sampling parameters
     timesteps: list[float],
     guidance: float = 4.0,
+    cond_latent = None,
     true_gs = 1,
     timestep_to_start_cfg=0,
     # ip-adapter parameters
     image_proj: Tensor=None, 
     neg_image_proj: Tensor=None, 
     ip_scale: Tensor | float = 1.0,
-    neg_ip_scale: Tensor | float = 1.0
+    neg_ip_scale: Tensor | float = 1.0,
 ):
     i = 0
     # this is ignored for schnell
     guidance_vec = torch.full((img.shape[0],), guidance, device=img.device, dtype=img.dtype)
+
     for t_curr, t_prev in zip(timesteps[:-1], timesteps[1:]):
         t_vec = torch.full((img.shape[0],), t_curr, dtype=img.dtype, device=img.device)
+        if cond_latent is not None:
+            cond_latent = cond_latent.to(img.dtype)
+            _, c, h, w = cond_latent.shape
+            assert h * w // 4 == img.shape[1] and c * 4 == img.shape[2]  # tianshuo
+            img = rearrange(img, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h // 2, w=w // 2, ph=2, pw=2)
+            img = torch.cat([img, cond_latent], dim=3)
+            img = rearrange(img, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+
         pred = model(
             img=img,
             img_ids=img_ids,
@@ -149,8 +160,14 @@ def denoise(
                 ip_scale=neg_ip_scale, 
             )     
             pred = neg_pred + true_gs * (pred - neg_pred)
+
         img = img + (t_prev - t_curr) * pred
         i += 1
+        if cond_latent is not None:
+            img = rearrange(img, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h // 2, w=w, ph=2, pw=2)
+            img, _ = img.chunk(2, dim=3)
+            img = rearrange(img, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+
     return img
 
 def denoise_controlnet(

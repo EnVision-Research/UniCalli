@@ -42,7 +42,9 @@ def prepare(t5: HFEmbedder, clip: HFEmbedder, img: Tensor, prompt: str | list[st
     img_ids[..., 1] = img_ids[..., 1] + torch.arange(h // 2)[:, None]
     img_ids[..., 2] = img_ids[..., 2] + torch.arange(w // 2)[None, :]
     img_ids = repeat(img_ids, "h w c -> b (h w) c", b=bs)
-    img_ids = img_ids.repeat(1, 2, 1)
+
+    img_ids_2 = img_ids.clone()
+    img_ids = torch.cat((img_ids, img_ids_2), dim=1)
 
     if isinstance(prompt, str):
         prompt = [prompt]

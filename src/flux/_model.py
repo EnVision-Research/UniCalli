@@ -77,11 +77,6 @@ class Flux(nn.Module):
         self.final_layer = LastLayer(self.hidden_size, 1, self.out_channels)
         self.gradient_checkpointing = False
 
-        self.module_embeddings = None
-    
-    def init_module_embeddings(self, tokens_num: int):
-        self.module_embeddings = nn.Parameter(torch.zeros(1, tokens_num, 1))
-
     def _set_gradient_checkpointing(self, module, value=False):
         if hasattr(module, "gradient_checkpointing"):
             module.gradient_checkpointing = value
@@ -145,9 +140,8 @@ class Flux(nn.Module):
         img_ids: Tensor,
         txt: Tensor,
         txt_ids: Tensor,
-        y: Tensor,
         timesteps: Tensor,
-        timesteps2: Tensor | None = None,
+        y: Tensor,
         block_controlnet_hidden_states=None,
         guidance: Tensor | None = None,
         image_proj: Tensor | None = None, 
@@ -158,30 +152,12 @@ class Flux(nn.Module):
 
         # running on sequences img
         img = self.img_in(img)
-        if self.module_embeddings is not None:
-            img0, img1 = torch.chunk(img, 2, dim=1)
-            img0 = img0 + self.module_embeddings
-            img = torch.cat((img0, img1), dim=1)
         vec = self.time_in(timestep_embedding(timesteps, 256))
-        
-        if timesteps2 is not None:
-            vec2 = self.time_in(timestep_embedding(timesteps2, 256))
-        else:
-            vec2 = None
-
         if self.params.guidance_embed:
             if guidance is None:
                 raise ValueError("Didn't get guidance strength for guidance distilled model.")
             vec = vec + self.guidance_in(timestep_embedding(guidance, 256))
-            if vec2 is not None:
-                vec2 = vec2 + self.guidance_in(timestep_embedding(guidance, 256))
-
-        if y.dtype != vec.dtype:
-            y = y.to(vec.dtype)
-
         vec = vec + self.vector_in(y)
-        if vec2 is not None:
-            vec2 = vec2 + self.vector_in(y)
         txt = self.txt_in(txt)
 
         ids = torch.cat((txt_ids, img_ids), dim=1)
@@ -206,7 +182,6 @@ class Flux(nn.Module):
                     img,
                     txt,
                     vec,
-                    vec2,
                     pe,
                     image_proj,
                     ip_scale,
@@ -216,7 +191,6 @@ class Flux(nn.Module):
                     img=img, 
                     txt=txt, 
                     vec=vec, 
-                    vec2=vec2,
                     pe=pe, 
                     image_proj=image_proj,
                     ip_scale=ip_scale, 
@@ -244,12 +218,11 @@ class Flux(nn.Module):
                     create_custom_forward(block),
                     img,
                     vec,
-                    vec2,
                     pe,
                 )
             else:
-                img = block(img, vec=vec, vec2=vec2, pe=pe)
+                img = block(img, vec=vec, pe=pe)
         img = img[:, txt.shape[1] :, ...]
 
-        img = self.final_layer(img, vec, vec2)  # (N, T, patch_size ** 2 * out_channels)
+        img = self.final_layer(img, vec)  # (N, T, patch_size ** 2 * out_channels)
         return img

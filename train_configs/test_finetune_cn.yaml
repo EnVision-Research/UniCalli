@@ -1,0 +1,47 @@
+model_name: "flux-dev"
+data_config:
+  train_batch_size: 2
+  num_workers: 4
+  img_size: 128
+  img_dir: ./word_dataset/finalpage
+  synth_prob: 0.2
+  data_aug: true
+report_to: wandb
+train_batch_size: 2
+output_dir: ckpts/generation_cn_prompts_detailed_dataaug_fully/
+max_train_steps: 500000
+learning_rate: 5e-6
+lr_scheduler: constant
+lr_warmup_steps: 10
+adam_beta1: 0.9
+adam_beta2: 0.999
+adam_weight_decay: 0.01
+adam_epsilon: 1e-8
+max_grad_norm: 1.0
+logging_dir: logs
+mixed_precision: "bf16"
+checkpointing_steps: 5000
+checkpoints_total_limit: 10
+tracker_project_name: finetune_test
+resume_from_checkpoint: latest
+gradient_accumulation_steps: 1
+disable_sampling: false
+sample_every: 5000 # sample every this many steps
+sample_width: 128
+sample_height: 640
+sample_steps: 25
+sample_prompts:
+ - 中国传统书法作品，字体：行，背景：黑色，作者：王羲之，东晋书圣，各体皆精。笔法神妙，风神潇洒，被誉为书法史上的最高峰，影响千古
+ - 中国传统书法作品，字体：行，背景：黑色，作者：王羲之，东晋书圣，各体皆精。笔法神妙，风神潇洒，被誉为书法史上的最高峰，影响千古
+ - 中国传统书法作品，字体：行，背景：黑色，作者：王羲之，东晋书圣，各体皆精。笔法神妙，风神潇洒，被誉为书法史上的最高峰，影响千古
+ - 中国传统书法作品，字体：行，背景：黑色，作者：王羲之，东晋书圣，各体皆精。笔法神妙，风神潇洒，被誉为书法史上的最高峰，影响千古
+ - 合成书法数据，背景：白，字体：草，特点：笔画连贯、流畅，结构疏密有致，结构更自由，有时上下左右会压缩或伸展以配合笔势
+ - 合成书法数据，背景：白，字体：楷，特点：结构对称、重心稳定，间架布局严谨，笔画之间留有清晰的空隙，字形便于辨认
+ - 合成书法数据，背景：黑，字体：楷，特点：结构对称、重心稳定，间架布局严谨，笔画之间留有清晰的空隙，字形便于辨认
+ - 合成书法数据，背景：黑，字体：草，特点：笔画连贯、流畅，结构疏密有致，结构更自由，有时上下左右会压缩或伸展以配合笔势
+
+#  - 中国传统书法作品，字体：楷，背景：黑，作者：佚名，历代无名书法家作品的统称，风格多样，包含了各个时代不同流派的书法特色，体现了民间书法的朴实与自然
+#  - 中国传统书法作品，字体：楷，背景：白，作者：姜夔，宋代词人书法家，善行书。笔法清秀，风格典雅，体现了宋代文人书法的审美追求
+#  - 中国传统书法作品，字体：楷，背景：黑，作者：颜真卿，唐代书法家，创颜体楷书。笔法雄浑，气势磅礴，体现了盛唐气象，影响深远
+#  - 中国传统书法作品，字体：楷，背景：黑，作者：欧阳询，唐代书法家，创欧体楷书。笔法严谨，结构险峻，是唐代楷书四大家之一
+#  - 合成书法数据，字体：楷，背景：黑。

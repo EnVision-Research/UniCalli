@@ -173,7 +173,7 @@ configs = {
         params=FluxParams(
             in_channels=64,
             vec_in_dim=768,
-            context_in_dim=4096,
+            context_in_dim=4096,  # tianshuo, t5xxl: 4096, mt5-base: 768
             hidden_size=3072,
             mlp_ratio=4.0,
             num_heads=24,
@@ -323,6 +323,9 @@ def load_flow_model2(name: str, device: str | torch.device = "cuda", hf_download
         print("Loading checkpoint")
         # load_sft doesn't support torch.device
         sd = load_sft(ckpt_path, device=str(device))
+        # tianshuo, if use other text encoder, we need to crop the txt_in.weight
+        # if sd['txt_in.weight'].shape[1] != model.txt_in.weight.shape[1]:
+        #     sd['txt_in.weight'] = sd['txt_in.weight'][:, :model.txt_in.weight.shape[1]]
         missing, unexpected = model.load_state_dict(sd, strict=False, assign=True)
         print_load_warning(missing, unexpected)
     return model
@@ -363,6 +366,7 @@ def load_controlnet(name, device, transformer=None):
 def load_t5(device: str | torch.device = "cuda", max_length: int = 512) -> HFEmbedder:
     # max length 64, 128, 256 and 512 should work (if your sequence is short enough)
     return HFEmbedder("xlabs-ai/xflux_text_encoders", max_length=max_length, torch_dtype=torch.bfloat16).to(device)
+    # return HFEmbedder("google/mt5-base", max_length=max_length, torch_dtype=torch.bfloat16).to(device)
 
 def load_clip(device: str | torch.device = "cuda") -> HFEmbedder:
     return HFEmbedder("openai/clip-vit-large-patch14", max_length=77, torch_dtype=torch.bfloat16).to(device)

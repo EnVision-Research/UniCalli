@@ -4,10 +4,11 @@ data_config:
   num_workers: 4
   img_size: 128
   img_dir: ./word_dataset/finalpage
+  synth_prob: 0.5
   # random_ratio: true # support multi crop preprocessing
 report_to: wandb  # wandb
 train_batch_size: 4
-output_dir: ckpts/debug/
+output_dir: ckpts/generation_5xall/
 max_train_steps: 1000000
 learning_rate: 1e-5
 lr_scheduler: constant
@@ -33,13 +34,29 @@ sample_width: 128
 sample_height: 640
 sample_steps: 20
 sample_prompts:
-  - "A piece of traditional Chinese calligraphy artwork from ancient times, author: zhi yong, font: kai, background color: white."
-  - "font: kai, background color: white."
-  - "A piece of traditional Chinese calligraphy artwork from ancient times, author: liu gong quan, font: kai, background color: black."
-  - "font: kai, background color: white."
-  - "A piece of traditional Chinese calligraphy artwork from ancient times, author: wang xi zhi, font: kai, background color: black."
-  - "font: kai, background color: black."
-  - "A piece of traditional Chinese calligraphy artwork from ancient times, author: mo ya ke shi, font: li, background color: black."
-  - "A piece of traditional Chinese calligraphy artwork from ancient times, author: zao xiang ji, font: kai, background color: black."
-  - "font: kai, background color: black."
-  - "A piece of traditional Chinese calligraphy artwork from ancient times, author: yan zhen qing, font: xing, background color: black."
+ - <type> Traditional Chinese calligraphy </type>, <author> wu tong wei </author>, <font> kai </font>, <bg color> black </bg color>.
+ - <type> Traditional Chinese calligraphy </type>, <author> zhao meng fu </author>, <font> xing </font>, <bg color> white </bg color>.
+ - <type> Traditional Chinese calligraphy </type>, <author> huang ting jian </author>, <font> cao </font>, <bg color> white </bg color>.
+ - <type> Traditional Chinese calligraphy </type>, <author> huang ting jian </author>, <font> xing </font>, <bg color> white </bg color>.
+ - <type> Traditional Chinese calligraphy </type>, <author> liu gong quan </author>, <font> kai </font>, <bg color> black </bg color>.
+ - <type> Traditional Chinese calligraphy </type>, <author> chu sui liang </author>, <font> kai </font>, <bg color> white </bg color>.
+ - <type> Traditional Chinese calligraphy </type>, <author> yi ming </author>, <font> li </font>, <bg color> black </bg color>.
+ - <type> Synthetic </type>, <author> </author>, <font> kai </font>, <bg color> black </bg color>.
+#  - <type> Traditional Chinese calligraphy </type>, <author> wu tong wei, wu tong wei, wu tong wei, wu tong wei, wu tong wei, wu tong wei </author>, <font> kai </font>, <bg color> black </bg color>.
+#  - <type> Traditional Chinese calligraphy </type>, <author> zhao meng fu, zhao meng fu, zhao meng fu, zhao meng fu, zhao meng fu, zhao meng fu </author>, <font> xing </font>, <bg color> white </bg color>.
+#  - <type> Traditional Chinese calligraphy </type>, <author> huang ting jian, huang ting jian, huang ting jian, huang ting jian, huang ting jian, huang ting jian </author>, <font> cao </font>, <bg color> white </bg color>.
+#  - <type> Traditional Chinese calligraphy </type>, <author> huang ting jian, huang ting jian, huang ting jian, huang ting jian, huang ting jian, huang ting jian </author>, <font> xing </font>, <bg color> white </bg color>.
+#  - <type> Traditional Chinese calligraphy </type>, <author> liu gong quan, liu gong quan, liu gong quan, liu gong quan, liu gong quan, liu gong quan </author>, <font> kai </font>, <bg color> black </bg color>.
+#  - <type> Traditional Chinese calligraphy </type>, <author> chu sui liang, chu sui liang, chu sui liang, chu sui liang, chu sui liang, chu sui liang </author>, <font> kai </font>, <bg color> white </bg color>.
+#  - <type> Traditional Chinese calligraphy </type>, <author> yi ming, yi ming, yi ming, yi ming, yi ming, yi ming </author>, <font> li </font>, <bg color> black </bg color>.
+#  - <type> Synthetic </type>, <author> </author>, <font> kai </font>, <bg color> black </bg color>.
+  # - "A piece of traditional Chinese calligraphy artwork from ancient times, author: zhi yong, <font> kai </font>, bg color: white."
+  # - "<font> kai </font>, bg color: white."
+  # - "A piece of traditional Chinese calligraphy artwork from ancient times, author: liu gong quan, <font> kai </font>, bg color: black."
+  # - "<font> kai </font>, bg color: white."
+  # - "A piece of traditional Chinese calligraphy artwork from ancient times, author: wang xi zhi, <font> kai </font>, bg color: black."
+  # - "<font> kai </font>, bg color: black."
+  # - "A piece of traditional Chinese calligraphy artwork from ancient times, author: mo ya ke shi, <font> li </font>, bg color: black."
+  # - "A piece of traditional Chinese calligraphy artwork from ancient times, author: zao xiang ji, <font> kai </font>, bg color: black."
+  # - "<font> kai </font>, bg color: black."
+  # - "A piece of traditional Chinese calligraphy artwork from ancient times, author: yan zhen qing, <font> xing </font>, bg color: black."

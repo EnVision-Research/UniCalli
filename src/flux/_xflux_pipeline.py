@@ -192,8 +192,10 @@ class XFluxPipeline:
             image_proj = self.get_image_proj(image_prompt)
             neg_image_proj = self.get_image_proj(neg_image_prompt)
 
-        if self.controlnet_loaded:
-            controlnet_image = self.annotator(controlnet_image, width, height)
+        # if self.controlnet_loaded:
+        if controlnet_image is not None:
+            if self.controlnet_loaded:
+                controlnet_image = self.annotator(controlnet_image, width, height)
             controlnet_image = torch.from_numpy((np.array(controlnet_image) / 127.5) - 1)
             controlnet_image = controlnet_image.permute(
                 2, 0, 1).unsqueeze(0).to(torch.bfloat16).to(self.device)
@@ -281,9 +283,10 @@ class XFluxPipeline:
             1, height, width, device=self.device,
             dtype=torch.bfloat16, seed=seed
         )
+
         timesteps = get_schedule(
             num_steps,
-            (width // 8) * (height // 8) // (16 * 16),
+            (width*2 // 8) * (height // 8) // (16 * 16),   # tianshuo
             shift=True,
         )
         torch.manual_seed(seed)
@@ -291,9 +294,11 @@ class XFluxPipeline:
             if self.offload:
                 self.t5, self.clip = self.t5.to(self.device), self.clip.to(self.device)
 
-            assert self.processor is not None, "Processor is not set"
-            inp_cond = prepare(t5=self.t5, clip=self.clip, processor=self.processor, img=x, prompt=prompt)
-            neg_inp_cond = prepare(t5=self.t5, clip=self.clip, processor=self.processor, img=x, prompt=neg_prompt)
+            if not self.controlnet_loaded and controlnet_image is not None:  # tianshuo
+                cond_latent = self.ae.encode(controlnet_image.to(self.device, dtype=torch.float32))
+
+            inp_cond = prepare(t5=self.t5, clip=self.clip, img=x, prompt=prompt)
+            neg_inp_cond = prepare(t5=self.t5, clip=self.clip, img=x, prompt=neg_prompt)
 
             if self.offload:
                 self.offload_model_to_cpu(self.t5, self.clip)
@@ -306,7 +311,7 @@ class XFluxPipeline:
                     timesteps=timesteps,
                     guidance=guidance,
                     controlnet_cond=controlnet_image,
-                    timestep_to_start_cfg=timestep_to_start_cfg,
+                    timestep_to_start_cfg=timestep_to_start_cfg,                                                                            
                     neg_txt=neg_inp_cond['txt'],
                     neg_txt_ids=neg_inp_cond['txt_ids'],
                     neg_vec=neg_inp_cond['vec'],
@@ -323,6 +328,7 @@ class XFluxPipeline:
                     **inp_cond,
                     timesteps=timesteps,
                     guidance=guidance,
+                    cond_latent=cond_latent,
                     timestep_to_start_cfg=timestep_to_start_cfg,
                     neg_txt=neg_inp_cond['txt'],
                     neg_txt_ids=neg_inp_cond['txt_ids'],
@@ -354,9 +360,8 @@ class XFluxPipeline:
 
 
 class XFluxSampler(XFluxPipeline):
-    def __init__(self, clip, t5, ae, model, device, processor=None):
+    def __init__(self, clip, t5, ae, model, device):
         self.clip = clip
-        self.processor = processor
         self.t5 = t5
         self.ae = ae
         self.model = model
