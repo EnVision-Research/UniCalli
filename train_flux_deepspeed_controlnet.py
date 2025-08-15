@@ -112,7 +112,7 @@ def main():
     controlnet = load_controlnet(name=args.model_name, device=accelerator.device, transformer=dit)
     
     # print('load pretrained weight, for the first time...')
-    # state_dict = torch.load("/data/user/user64/code/word-flux/ckpts/ckpts-column-cnt-chars5-newcap2/checkpoint-30000/controlnet.bin", map_location="cpu")
+    # state_dict = torch.load("/data/user/user64/code/flux-calligraphy/ckpts/ckpts-column-cnt-chars5-newcap2/checkpoint-30000/controlnet.bin", map_location="cpu")
     # controlnet.load_state_dict(state_dict, strict=True)
 
     controlnet = controlnet.to(torch.float32)

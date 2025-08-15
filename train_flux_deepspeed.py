@@ -240,8 +240,8 @@ def main():
                     inp = prepare(t5=t5, clip=clip, img=x_1, prompt=prompts)
 
                 bs = img.shape[0]
-                # mode = random.choice(['cond', 'img'])
-                mode = 'img'
+                mode = random.choice(['cond', 'img'])
+                # mode = 'img'
                 if mode == 'img':  # pred cond, by given pure img
                     t = torch.sigmoid(torch.randn((1,), device=accelerator.device))
                     t_cond = torch.zeros_like(t).to(accelerator.device)
@@ -313,7 +313,7 @@ def main():
                         for i, prompt in enumerate(args.sample_prompts):
                             # generation
                             idx = i
-                            cond_image = Image.open(f'test_data_all/test_cn_2/cond_{idx}.png')
+                            cond_image = Image.open(f'test_data_all/test_en_gen/cond_{idx}.png')
                             # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
                             result = sampler(prompt=prompt,
                                             width=args.sample_width,
@@ -324,20 +324,20 @@ def main():
                                             )
                             images.append(wandb.Image(result))
                             result.save(f"{args.output_dir}/validation/{global_step}_gen_{idx}.png")
-                        # for i, prompt in enumerate(args.sample_prompts):
-                        #     # generation
-                        #     idx = i
-                        #     cond_image = Image.open(f'test_data_all/test_cn/img_{idx}.png')
-                        #     # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
-                        #     result = sampler(prompt=prompt,
-                        #                     width=args.sample_width,
-                        #                     height=args.sample_height,
-                        #                     num_steps=args.sample_steps,
-                        #                     controlnet_image=cond_image,
-                        #                     is_generation=False
-                        #                     )
-                        #     images.append(wandb.Image(result))
-                        #     result.save(f"{args.output_dir}/validation/{global_step}_rec_{idx}.png")
+                        for i, prompt in enumerate(args.sample_prompts):
+                            # generation
+                            idx = i
+                            cond_image = Image.open(f'test_data_all/test_en_rec/img_{idx}.png')
+                            # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
+                            result = sampler(prompt=prompt,
+                                            width=args.sample_width,
+                                            height=args.sample_height,
+                                            num_steps=args.sample_steps,
+                                            controlnet_image=cond_image,
+                                            is_generation=False
+                                            )
+                            images.append(wandb.Image(result))
+                            result.save(f"{args.output_dir}/validation/{global_step}_rec_{idx}.png")
                         wandb.log({f"Results, step {global_step}": images})
 
                 if global_step % args.checkpointing_steps == 0:
