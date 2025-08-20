@@ -80,7 +80,7 @@ class Flux(nn.Module):
         self.module_embeddings = None
     
     def init_module_embeddings(self, tokens_num: int):
-        self.module_embeddings = nn.Parameter(torch.zeros(1, tokens_num, 1))
+        self.module_embeddings = nn.Parameter(torch.zeros(1, tokens_num, self.hidden_size))
 
     def _set_gradient_checkpointing(self, module, value=False):
         if hasattr(module, "gradient_checkpointing"):

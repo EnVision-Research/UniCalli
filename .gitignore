@@ -27,6 +27,7 @@ ckpts/
 word_dataset/
 wandb/
 libs/
+test_data/
 *.ttf
 
 share/python-wheels/

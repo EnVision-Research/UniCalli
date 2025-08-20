@@ -136,11 +136,6 @@ def crop_to_aspect_ratio(image, ratio="16:9"):
     return cropped_img
 
 def process_image_row(row, abs_path, required_chars=4, col_threshold=50, padding=5):
-    # 读取基础数据
-    chirography = convert_to_pinyin(row['chirography'])
-    if chirography == 'zhuan':  # currently, we do not support zhuan
-        return None, None, None, None
-
     img = Image.open(os.path.join(abs_path, row['img_path']))
     w, h = img.size
 
@@ -211,14 +206,13 @@ def process_image_row(row, abs_path, required_chars=4, col_threshold=50, padding
         new_locations.append({'c': char['c'], 'p': new_p})
         texts += char['c']
 
-    caption = f"Traditional Chinese calligraphy works, font: {chirography}, "
-    return cropped_img, new_locations, caption, row['author']
+    return cropped_img, new_locations, row['chirography'], row['author']
 
 class CustomImageDataset(Dataset):
     def __init__(self, img_dir, img_size=512, caption_type='json', random_ratio=False, 
             author_descriptions=None, font_scale=0.8, font_size=None, required_chars=5, 
             pred_box=False, to_english=True, txt_dir='./libs/text_clips', ttf_dir='./libs/font', 
-            synth_prob=0.5, data_aug=False):        
+            synth_prob=0.5, data_aug=False, font_descriptions=None):        
         self.image_path = os.path.join(img_dir, 'images')
         df1 = pd.read_csv(os.path.join(img_dir, 'data1.csv'))
         df2 = pd.read_csv(os.path.join(img_dir, 'data2.csv'))
@@ -229,6 +223,10 @@ class CustomImageDataset(Dataset):
         assert author_descriptions is not None
         with open(author_descriptions, 'r', encoding='utf-8') as f:
             self.author_style = json.load(f)
+
+        assert font_descriptions is not None
+        with open(font_descriptions, 'r', encoding='utf-8') as f:
+            self.font_style_des = json.load(f)
         
         print('Dataset length:', len(self.samples))
         print('Synth_prob:', synth_prob)
@@ -321,14 +319,14 @@ class CustomImageDataset(Dataset):
                 return self.get_real_img(random.randint(0, len(self.samples) - 1))
 
             sample_row = self.samples.iloc[idx]
-            img, new_locs, prompt, author = process_image_row(
+            img, new_locs, chirography, author = process_image_row(
                 sample_row, 
                 self.image_path, 
                 required_chars=self.required_chars, 
                 col_threshold=50,
                 padding=50,
             )
-            
+
             if new_locs is None:
                 # print(f"No valid characters found in the image: {img_path}.")
                 self.bad_indices.append(img_path)
@@ -344,10 +342,14 @@ class CustomImageDataset(Dataset):
                 img = Image.fromarray(img, mode='L')
                 img = img.convert('RGB')  # 确保是RGB模式
 
+            prompt = f"Traditional Chinese calligraphy works, background: {polarity}, font: {convert_to_pinyin(chirography)},"
+            if chirography in self.font_style_des:
+                prompt += ' ' + self.font_style_des[chirography]
+
             if author in self.author_style:
-                prompt += f'background: {polarity}, author: {self.author_style[author]}'
+                prompt += f' author: {self.author_style[author]}'
             else:
-                prompt += f'background: {polarity}, author: {convert_to_pinyin(author)}.'
+                prompt += f' author: {convert_to_pinyin(author)}.'
             
             cond_img, box_img = self.get_condition(new_locs, img.size)
             # cond_img.save('debug_cond.png'); img.save('debug.png')
@@ -409,10 +411,8 @@ class CustomImageDataset(Dataset):
         cond_img = torch.from_numpy((np.array(cond_img) / 127.5) - 1).permute(2, 0, 1)
         prompt = f'Synthetic calligraphy data, background: {bg_color}, font: {convert_to_pinyin(font_style)}, '
 
-        if font_style == '楷':
-            prompt += 'symmetrical structure, stable center of gravity, rigorous layout of the frame, clear gaps between strokes, easy to identify the shape of the characters'
-        elif font_style == '草':
-            prompt += 'coherent and smooth strokes, sparse and dense structure, and more free structure. Sometimes up, down, left and right compress or stretch to match the strokes'
+        if font_style in self.font_style_des:
+            prompt += self.font_style_des[font_style]
         else:
             raise ValueError(f"Unsupported font style: {font_style}")
 
@@ -455,19 +455,20 @@ if __name__ == '__main__':
         image = Image.fromarray(image.astype(np.uint8))
         condition_img = Image.fromarray(condition_img.astype(np.uint8))
         # image.save(f'ckpts/img_{index}.png'); condition_img.save(f'ckpts/cond_{index}.png')
-        image.save(f'test_data/test_en_rec/img_{index}.png'); condition_img.save(f'test_data/test_en_rec/cond_{index}.png')
+        # image.save(f'test_data/debug/img_{index}.png'); condition_img.save(f'test_data/debug/cond_{index}.png')
         print(caption)
         
     dataset = CustomImageDataset(
-        '/data/user/txu647/code/flux-calligraphy/word_dataset/finalpage',
+        './word_dataset/finalpage',
         img_size=128,
         required_chars=5,
-        txt_dir='/data/user/txu647/code/flux-calligraphy/libs/text_clips',
-        ttf_dir='/data/user/txu647/code/flux-calligraphy/libs/font',
+        txt_dir='./libs/text_clips',
+        ttf_dir='./libs/font',
         to_english=True,
         synth_prob=1.0,
         data_aug=True,
-        author_descriptions="./calligraphy_styles_en.json",
+        author_descriptions="./word_dataset/calligraphy_styles_en.json",
+        font_descriptions="./word_dataset/chirography.json"
         )
 
     # find_error_indices(dataset, 'error_indices_chars5.json')
@@ -475,6 +476,7 @@ if __name__ == '__main__':
     
     # for i in range(len(dataset)):
     for i in range(8):
-        get_item(dataset, i+8)
+        # index = random.randint(0, len(dataset))
+        get_item(dataset, i)
         # breakpoint()
     

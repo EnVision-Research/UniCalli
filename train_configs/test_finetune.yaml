@@ -1,17 +1,18 @@
 model_name: "flux-dev"
 data_config:
-  train_batch_size: 2
+  train_batch_size: 1
   num_workers: 4
   img_size: 128
   img_dir: ./word_dataset/finalpage
   synth_prob: 0.2
   data_aug: true
-  author_descriptions: ./calligraphy_styles_en.json
-report_to: wandb
-train_batch_size: 2
+  author_descriptions: ./word_dataset/calligraphy_styles_en.json
+  font_descriptions: ./word_dataset/chirography.json
+report_to: tensorboard
+train_batch_size: 1
 output_dir: ckpts/generation_v2/
-max_train_steps: 500000
-learning_rate: 5e-6
+max_train_steps: 1000000
+learning_rate: 1e-6
 lr_scheduler: constant
 lr_warmup_steps: 10
 adam_beta1: 0.9
@@ -21,23 +22,30 @@ adam_epsilon: 1e-8
 max_grad_norm: 1.0
 logging_dir: logs
 mixed_precision: "bf16"
-checkpointing_steps: 5000
+checkpointing_steps: 10000
 checkpoints_total_limit: 10
 tracker_project_name: finetune_test
 resume_from_checkpoint: latest
 gradient_accumulation_steps: 1
 disable_sampling: false
-sample_every: 1 # sample every this many steps
+sample_every: 10000 # sample every this many steps
 sample_width: 128
 sample_height: 640
 sample_steps: 25
 sample_prompts:
- - "Traditional Chinese calligraphy works, font: xing, background: black, author: Wang Xizhi (303–361), the 'Sage of Calligraphy,' was a Jin dynasty master whose running script epitomized fluidity and grace. His 'Preface to the Orchid Pavilion' is revered as a pinnacle of the art."
- - "Traditional Chinese calligraphy works, font: xing, background: black, author: Wang Xizhi (303–361), the 'Sage of Calligraphy,' was a Jin dynasty master whose running script epitomized fluidity and grace. His 'Preface to the Orchid Pavilion' is revered as a pinnacle of the art."
- - "Traditional Chinese calligraphy works, font: xing, background: black, author: Wang Xizhi (303–361), the 'Sage of Calligraphy,' was a Jin dynasty master whose running script epitomized fluidity and grace. His 'Preface to the Orchid Pavilion' is revered as a pinnacle of the art."
- - "Traditional Chinese calligraphy works, font: xing, background: black, author: Wang Xizhi (303–361), the 'Sage of Calligraphy,' was a Jin dynasty master whose running script epitomized fluidity and grace. His 'Preface to the Orchid Pavilion' is revered as a pinnacle of the art."
- - "Synthetic calligraphy data, background: white, font: kai, symmetrical structure, stable center of gravity, rigorous layout of the frame, clear gaps between strokes, easy to identify the shape of the characters"
- - "Synthetic calligraphy data, background: black, font: kai, symmetrical structure, stable center of gravity, rigorous layout of the frame, clear gaps between strokes, easy to identify the shape of the characters"
- - "Synthetic calligraphy data, background: black, font: cao, coherent and smooth strokes, sparse and dense structure, and more free structure. Sometimes up, down, left and right compress or stretch to match the strokes"
- - "Synthetic calligraphy data, background: white, font: cao, coherent and smooth strokes, sparse and dense structure, and more free structure. Sometimes up, down, left and right compress or stretch to match the strokes"
- 
+ - "Traditional Chinese calligraphy works, background: black, font: xing, a calligraphic style that blends structure and freedom, featuring fluid strokes, moderate simplification, and expressive rhythm while preserving readability. author: Wang Xizhi (303–361), the 'Sage of Calligraphy,' was a Jin dynasty master whose running script epitomized fluidity and grace. His 'Preface to the Orchid Pavilion' is revered as a pinnacle of the art."
+ - "Traditional Chinese calligraphy works, background: black, font: xing, a calligraphic style that blends structure and freedom, featuring fluid strokes, moderate simplification, and expressive rhythm while preserving readability. author: Wang Xizhi (303–361), the 'Sage of Calligraphy,' was a Jin dynasty master whose running script epitomized fluidity and grace. His 'Preface to the Orchid Pavilion' is revered as a pinnacle of the art."
+ - "Traditional Chinese calligraphy works, background: black, font: xing, a calligraphic style that blends structure and freedom, featuring fluid strokes, moderate simplification, and expressive rhythm while preserving readability. author: Wang Xizhi (303–361), the 'Sage of Calligraphy,' was a Jin dynasty master whose running script epitomized fluidity and grace. His 'Preface to the Orchid Pavilion' is revered as a pinnacle of the art."
+ - "Traditional Chinese calligraphy works, background: black, font: xing, a calligraphic style that blends structure and freedom, featuring fluid strokes, moderate simplification, and expressive rhythm while preserving readability. author: Wang Xizhi (303–361), the 'Sage of Calligraphy,' was a Jin dynasty master whose running script epitomized fluidity and grace. His 'Preface to the Orchid Pavilion' is revered as a pinnacle of the art."
+ - "Synthetic calligraphy data, background: white, font: kai, symmetrical structure, stable center of gravity, rigorous layout of the frame, clear gaps between strokes, easy to identify the shape of the characters."
+ - "Synthetic calligraphy data, background: black, font: xing, a calligraphic style that blends structure and freedom, featuring fluid strokes, moderate simplification, and expressive rhythm while preserving readability."
+ - "Synthetic calligraphy data, background: black, font: cao, coherent and smooth strokes, sparse and dense structure, and more free structure. Sometimes up, down, left and right compress or stretch to match the strokes."
+ - "Synthetic calligraphy data, background: white, font: cao, coherent and smooth strokes, sparse and dense structure, and more free structure. Sometimes up, down, left and right compress or stretch to match the strokes."
+ - "Synthetic calligraphy data, background: white, font: kai, symmetrical structure, stable center of gravity, rigorous layout of the frame, clear gaps between strokes, easy to identify the shape of the characters."
+ - "Synthetic calligraphy data, background: black, font: xing, a calligraphic style that blends structure and freedom, featuring fluid strokes, moderate simplification, and expressive rhythm while preserving readability."
+ - "Synthetic calligraphy data, background: black, font: cao, coherent and smooth strokes, sparse and dense structure, and more free structure. Sometimes up, down, left and right compress or stretch to match the strokes."
+ - "Traditional Chinese calligraphy works, background: black, font: xing, a calligraphic style that blends structure and freedom, featuring fluid strokes, moderate simplification, and expressive rhythm while preserving readability. author: Wang Xizhi (303–361), the 'Sage of Calligraphy,' was a Jin dynasty master whose running script epitomized fluidity and grace. His 'Preface to the Orchid Pavilion' is revered as a pinnacle of the art."
+ - "Traditional Chinese calligraphy works, background: black, font: kai, symmetrical structure, stable center of gravity, rigorous layout of the frame, clear gaps between strokes, easy to identify the shape of the characters. author: Cliff inscriptions (moya kestone) refer to large-scale carvings of calligraphy on rock faces or cliffs, often for commemorative or religious purposes, showcasing monumental styles from various dynasties."
+ - "Traditional Chinese calligraphy works, background: black, font: kai, symmetrical structure, stable center of gravity, rigorous layout of the frame, clear gaps between strokes, easy to identify the shape of the characters. author: Ouyang Xun (557–641), a Tang dynasty calligrapher, produced highly disciplined and elegant regular script, influencing generations of scholars."
+ - "Traditional Chinese calligraphy works, background: white, font: kai, symmetrical structure, stable center of gravity, rigorous layout of the frame, clear gaps between strokes, easy to identify the shape of the characters. author: Zhang Jizhi (1186–1266), a Southern Song calligrapher, excelled in regular and running scripts. His works were upright, powerful, and faithful to Tang models, often compared to Yan Zhenqing."
+ - "Traditional Chinese calligraphy works, background: white, font: xing, a calligraphic style that blends structure and freedom, featuring fluid strokes, moderate simplification, and expressive rhythm while preserving readability. author: Mi Fu (1051–1107), a Northern Song calligrapher, painter, and connoisseur, was famous for his running and cursive scripts, characterized by elegance, speed, and rhythm."

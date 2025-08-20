@@ -169,6 +169,12 @@ def main():
             dit_state2 = {}
             for k in dit_state.keys():
                 dit_state2[k[len('module.'):]] = dit_state[k]
+            
+            # use (1, N, C) modulate embedding shape
+            # if dit_state2['module_embeddings'].shape != dit.module_embeddings.shape:
+            #     dit_state2['module_embeddings'] = dit_state2['module_embeddings'].repeat(
+            #         1, 1, dit.module_embeddings.shape[2])
+                
             dit.load_state_dict(dit_state2)
             # optimizer_state = torch.load(os.path.join(args.output_dir, path, 'optimizer.bin'), map_location='cpu', weights_only=False)
             # optimizer.load_state_dict(optimizer_state['base_optimizer_state'])
@@ -230,6 +236,8 @@ def main():
                     print(f"img shape: {img.shape}")
                     print(f"cond_image shape: {cond_image.shape}")
                     print(f"prompts: {prompts}")
+                    print(f"grad norm: {args.max_grad_norm}")
+                    print(f"learning rate: {args.learning_rate}")
 
                 cond_image = cond_image.to(accelerator.device)
                 with torch.no_grad():
@@ -281,7 +289,7 @@ def main():
                 cond_pred = rearrange(cond_pred, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h//2, w=w//2, ph=2, pw=2)
 
                 loss_img = F.mse_loss(img_pred.float(), (x_0 - x_1).float(), reduction="mean")
-                loss_cond = F.mse_loss(cond_pred.float(), (cond_0 - cond_latent).float(), reduction="mean")
+                loss_cond = 0.5 * F.mse_loss(cond_pred.float(), (cond_0 - cond_latent).float(), reduction="mean")
                 
                 loss = loss_img if mode == 'img' else loss_cond
                 # loss = F.mse_loss(model_pred.float(), (x_0 - x_1).float(), reduction="mean")
@@ -306,14 +314,16 @@ def main():
                 train_loss = 0.0
 
                 if not args.disable_sampling and global_step % args.sample_every == 0:
+                    os.makedirs(f"{args.output_dir}/validation/{global_step}", exist_ok=True)
                     if accelerator.is_main_process:
                         print(f"Sampling images for step {global_step}...")
                         sampler = XFluxSampler(clip=clip, t5=t5, ae=vae, model=dit, device=accelerator.device)
-                        images = []
-                        for i, prompt in enumerate(args.sample_prompts):
+                        # images = []
+                        for i, prompt in enumerate(args.sample_prompts[:8]):
+                            print(prompt)
                             # generation
                             idx = i
-                            cond_image = Image.open(f'test_data_all/test_en_gen/cond_{idx}.png')
+                            cond_image = Image.open(f'test_data/test_en_gen/cond_{idx}.png')
                             # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
                             result = sampler(prompt=prompt,
                                             width=args.sample_width,
@@ -322,12 +332,29 @@ def main():
                                             controlnet_image=cond_image,
                                             is_generation=True
                                             )
-                            images.append(wandb.Image(result))
-                            result.save(f"{args.output_dir}/validation/{global_step}_gen_{idx}.png")
-                        for i, prompt in enumerate(args.sample_prompts):
+                            # images.append(wandb.Image(result))
+                            result.save(f"{args.output_dir}/validation/{global_step}/gen_{idx}.png")
+
+                        for i, prompt in enumerate(args.sample_prompts[8:]):
+                            # generation
+                            print(prompt)
+                            idx = i
+                            cond_image = Image.open(f'test_data/c.png')
+                            # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
+                            result = sampler(prompt=prompt,
+                                            width=args.sample_width,
+                                            height=args.sample_height,
+                                            num_steps=args.sample_steps,
+                                            controlnet_image=cond_image,
+                                            is_generation=True
+                                            )
+                            # images.append(wandb.Image(result))
+                            result.save(f"{args.output_dir}/validation/{global_step}/sp_gen_{idx}.png")
+
+                        for i, prompt in enumerate(args.sample_prompts[:8]):
                             # generation
                             idx = i
-                            cond_image = Image.open(f'test_data_all/test_en_rec/img_{idx}.png')
+                            cond_image = Image.open(f'test_data/test_en_rec/img_{idx}.png')
                             # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
                             result = sampler(prompt=prompt,
                                             width=args.sample_width,
@@ -336,9 +363,9 @@ def main():
                                             controlnet_image=cond_image,
                                             is_generation=False
                                             )
-                            images.append(wandb.Image(result))
-                            result.save(f"{args.output_dir}/validation/{global_step}_rec_{idx}.png")
-                        wandb.log({f"Results, step {global_step}": images})
+                            # images.append(wandb.Image(result))
+                            result.save(f"{args.output_dir}/validation/{global_step}/rec_{idx}.png")
+                        # wandb.log({f"Results, step {global_step}": images})
 
                 if global_step % args.checkpointing_steps == 0:
                     if accelerator.is_main_process:
