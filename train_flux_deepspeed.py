@@ -23,7 +23,7 @@ from accelerate.utils import ProjectConfiguration, set_seed
 from huggingface_hub import create_repo, upload_folder
 from packaging import version
 from tqdm.auto import tqdm
-from transformers import CLIPTextModel, CLIPTokenizer
+from transformers import AutoModel
 from transformers.utils import ContextManagers
 from omegaconf import OmegaConf
 from copy import deepcopy
@@ -110,6 +110,17 @@ def main():
     clip.requires_grad_(False)
     dit = dit.to(torch.float32)
     dit.train()
+
+    intern_path = "/data/user/txu647/.cache/InternVL3-1B"
+    embed_tokens = AutoModel.from_pretrained(
+        intern_path,
+        torch_dtype=torch.float32,
+        device_map="cpu",
+        trust_remote_code=True
+    ).language_model.model.embed_tokens.eval()
+    embed_tokens.requires_grad_(False)
+    emb_token_weights = embed_tokens.weight.clone().detach()  #  detach: requires_grad False
+
     optimizer_cls = torch.optim.AdamW
     #you can train your own layers
     for n, param in dit.named_parameters():
@@ -229,8 +240,9 @@ def main():
         train_loss = 0.0
         for step, batch in enumerate(train_dataloader):
             with accelerator.accumulate(dit):
-                img, prompts, cond_image = batch
-
+                img, prompts, cond_image, text_token = batch
+                text_latent = embed_tokens(text_token).to(accelerator.device)
+                
                 if print_shape_flag:
                     print_shape_flag = False
                     print(f"img shape: {img.shape}")
@@ -263,6 +275,9 @@ def main():
                 
                 cond_0 = torch.randn_like(cond_latent).to(accelerator.device)
                 cond_t = (1 - t_cond) * cond_latent + t_cond * cond_0
+
+                cond_txt_0 = torch.randn_like(text_latent).to(accelerator.device)
+                cond_txt_t = (1 - t_cond) * text_latent + t_cond * cond_txt_0
                 # x_t = torch.cat((x_t, cond_t), dim=3)
                 
                 x_t = rearrange(x_t, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
@@ -275,10 +290,11 @@ def main():
                 guidance_vec = torch.full((x_t.shape[0],), 4, device=x_t.device, dtype=x_t.dtype)
 
                 # Predict the noise residual and compute loss
-                model_pred = dit(img=x_t.to(weight_dtype),
+                model_pred, txt_logits = dit(img=x_t.to(weight_dtype),
                                 img_ids=inp['img_ids'].to(weight_dtype),
                                 txt=inp['txt'].to(weight_dtype),
                                 txt_ids=inp['txt_ids'].to(weight_dtype),
+                                cond_txt_latent=cond_txt_t.to(weight_dtype),
                                 y=inp['vec'].to(weight_dtype),
                                 timesteps=t.to(weight_dtype),
                                 timesteps2=t_cond.to(weight_dtype),
@@ -291,7 +307,14 @@ def main():
                 loss_img = F.mse_loss(img_pred.float(), (x_0 - x_1).float(), reduction="mean")
                 loss_cond = 0.5 * F.mse_loss(cond_pred.float(), (cond_0 - cond_latent).float(), reduction="mean")
                 
-                loss = loss_img if mode == 'img' else loss_cond
+                emb_token_weights = emb_token_weights.to(txt_logits.device, txt_logits.dtype)
+                text_pred = torch.matmul(txt_logits, emb_token_weights)
+                loss_cond_txt = 0.5 * F.mse_loss(text_pred.float(), (cond_txt_0 - text_latent).float(), reduction="mean")
+
+                if mode == 'img':
+                    loss = loss_img + 0.01 * loss_cond + 0.01 * loss_cond_txt
+                else:
+                    loss = loss_cond + loss_cond_txt + 0.01 * loss_img
                 # loss = F.mse_loss(model_pred.float(), (x_0 - x_1).float(), reduction="mean")
 
                 # Gather the losses across all processes for logging (if we use distributed training).
@@ -317,20 +340,28 @@ def main():
                     os.makedirs(f"{args.output_dir}/validation/{global_step}", exist_ok=True)
                     if accelerator.is_main_process:
                         print(f"Sampling images for step {global_step}...")
-                        sampler = XFluxSampler(clip=clip, t5=t5, ae=vae, model=dit, device=accelerator.device)
+                        sampler = XFluxSampler(clip=clip, t5=t5, ae=vae, 
+                                model=dit, device=accelerator.device, intern_vlm_path=intern_path)
                         # images = []
+                        with open("test_data/test_en_gen/cond.txt", "r", encoding="utf-8") as f:
+                            text = f.read()
+                        cond_text_list = text.splitlines()
+
                         for i, prompt in enumerate(args.sample_prompts[:8]):
                             print(prompt)
                             # generation
                             idx = i
+                            cond_text = cond_text_list[i]
                             cond_image = Image.open(f'test_data/test_en_gen/cond_{idx}.png')
                             # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
-                            result = sampler(prompt=prompt,
+                            result, _ = sampler(prompt=prompt,
                                             width=args.sample_width,
                                             height=args.sample_height,
                                             num_steps=args.sample_steps,
                                             controlnet_image=cond_image,
-                                            is_generation=True
+                                            is_generation=True,
+                                            cond_text=cond_text,
+                                            required_chars=5
                                             )
                             # images.append(wandb.Image(result))
                             result.save(f"{args.output_dir}/validation/{global_step}/gen_{idx}.png")
@@ -340,13 +371,16 @@ def main():
                             print(prompt)
                             idx = i
                             cond_image = Image.open(f'test_data/c.png')
+                            cond_text = "生日快乐喵"
                             # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
-                            result = sampler(prompt=prompt,
+                            result, _ = sampler(prompt=prompt,
                                             width=args.sample_width,
                                             height=args.sample_height,
                                             num_steps=args.sample_steps,
                                             controlnet_image=cond_image,
-                                            is_generation=True
+                                            is_generation=True, 
+                                            cond_text=cond_text,
+                                            required_chars=5
                                             )
                             # images.append(wandb.Image(result))
                             result.save(f"{args.output_dir}/validation/{global_step}/sp_gen_{idx}.png")
@@ -356,15 +390,16 @@ def main():
                             idx = i
                             cond_image = Image.open(f'test_data/test_en_rec/img_{idx}.png')
                             # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
-                            result = sampler(prompt=prompt,
+                            result, text = sampler(prompt=prompt,
                                             width=args.sample_width,
                                             height=args.sample_height,
                                             num_steps=args.sample_steps,
                                             controlnet_image=cond_image,
-                                            is_generation=False
+                                            is_generation=False,
+                                            required_chars=5
                                             )
                             # images.append(wandb.Image(result))
-                            result.save(f"{args.output_dir}/validation/{global_step}/rec_{idx}.png")
+                            result.save(f"{args.output_dir}/validation/{global_step}/rec_{idx}_{text}.png")
                         # wandb.log({f"Results, step {global_step}": images})
 
                 if global_step % args.checkpointing_steps == 0:

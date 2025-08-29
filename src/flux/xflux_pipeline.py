@@ -29,6 +29,8 @@ from src.flux.util import (
 )
 
 from transformers import CLIPVisionModelWithProjection, CLIPImageProcessor
+from transformers import AutoModel, AutoTokenizer
+
 
 class XFluxPipeline:
     def __init__(self, model_type, device, offload: bool = False):
@@ -164,6 +166,7 @@ class XFluxPipeline:
                  prompt: str,
                  image_prompt: Image = None,
                  controlnet_image: Image = None,
+                 cond_text: Tensor = None,
                  width: int = 512,
                  height: int = 512,
                  guidance: float = 4,
@@ -176,8 +179,32 @@ class XFluxPipeline:
                  neg_prompt: str = '',
                  neg_image_prompt: Image = None,
                  timestep_to_start_cfg: int = 0,
-                 is_generation: bool = True
+                 is_generation: bool = True,
+                 required_chars: int = 5,
                  ):
+        
+        if not is_generation:
+            assert cond_text is None, "you shouldn't pass the corresponding text in recognition mode"
+            cond_text = ' '
+        else:
+            assert cond_text is not None, "you must pass the correspond text in generation mode"
+        
+        cond_text_token = self.tokenizer(
+            cond_text, 
+            return_tensors="pt", 
+            padding="max_length", 
+            max_length=required_chars
+        )["input_ids"]
+        cond_txt_latent = self.embed_tokens(cond_text_token).to(self.device, torch.bfloat16)
+
+        if not is_generation:
+            cond_txt_latent = torch.rand(
+                cond_txt_latent.size(), 
+                device=self.device,
+                dtype=torch.bfloat16,
+                generator=torch.Generator(device=self.device).manual_seed(seed)
+            )
+        
         width = 16 * (width // 16)
         height = 16 * (height // 16)
         image_proj = None
@@ -208,6 +235,7 @@ class XFluxPipeline:
             guidance,
             num_steps,
             seed,
+            cond_txt_latent,
             controlnet_image,
             timestep_to_start_cfg=timestep_to_start_cfg,
             true_gs=true_gs,
@@ -271,7 +299,8 @@ class XFluxPipeline:
         guidance,
         num_steps,
         seed,
-        controlnet_image = None,
+        cond_txt_latent,
+        controlnet_image=None,
         timestep_to_start_cfg = 0,
         true_gs = 3.5,
         control_weight = 0.9,
@@ -327,12 +356,13 @@ class XFluxPipeline:
                     neg_ip_scale=neg_ip_scale,
                 )
             else:
-                x = denoise(
+                x, text_token = denoise(
                     self.model,
                     **inp_cond,
                     timesteps=timesteps,
                     guidance=guidance,
                     cond_latent=cond_latent,
+                    cond_txt_latent=cond_txt_latent,
                     timestep_to_start_cfg=timestep_to_start_cfg,
                     neg_txt=neg_inp_cond['txt'],
                     neg_txt_ids=neg_inp_cond['txt_ids'],
@@ -343,6 +373,7 @@ class XFluxPipeline:
                     ip_scale=ip_scale,
                     neg_ip_scale=neg_ip_scale,
                     is_generation=is_generation,
+                    embed_token_weight=self.embed_tokens.weight.detach(),
                 )
 
             if self.offload:
@@ -355,7 +386,9 @@ class XFluxPipeline:
         x1 = x.clamp(-1, 1)
         x1 = rearrange(x1[-1], "c h w -> h w c")
         output_img = Image.fromarray((127.5 * (x1 + 1.0)).cpu().byte().numpy())
-        return output_img
+        assert text_token.shape[0] == 1
+        text = self.tokenizer.decode(text_token.squeeze(0))
+        return output_img, text
 
     def offload_model_to_cpu(self, *models):
         if not self.offload: return
@@ -365,7 +398,7 @@ class XFluxPipeline:
 
 
 class XFluxSampler(XFluxPipeline):
-    def __init__(self, clip, t5, ae, model, device):
+    def __init__(self, clip, t5, ae, model, device, intern_vlm_path):
         self.clip = clip
         self.t5 = t5
         self.ae = ae
@@ -375,3 +408,13 @@ class XFluxSampler(XFluxPipeline):
         self.controlnet_loaded = False
         self.ip_loaded = False
         self.offload = False
+
+        self.embed_tokens = AutoModel.from_pretrained(
+            intern_vlm_path,
+            torch_dtype=torch.float32,
+            device_map="cpu",
+            trust_remote_code=True
+        ).language_model.model.embed_tokens.eval()
+        self.embed_tokens.requires_grad_(False)
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            intern_vlm_path, trust_remote_code=True, use_fast=False)

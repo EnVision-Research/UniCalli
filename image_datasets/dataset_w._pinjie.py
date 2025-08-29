@@ -11,10 +11,6 @@ import ast
 from pypinyin import lazy_pinyin
 import json
 import cv2
-from transformers import AutoTokenizer
-
-path = "/data/user/txu647/.cache/InternVL3-1B"
-tokenizer = AutoTokenizer.from_pretrained(path, trust_remote_code=True, use_fast=False)
 
 
 def _morph_clean(mask255, ksize=3, open_iters=1, close_iters=1, min_area=64):
@@ -212,14 +208,55 @@ def process_image_row(row, abs_path, required_chars=5, col_threshold=50, padding
 
     return cropped_img, new_locations, row['chirography'], row['author']
 
+
+def process_pin_image_row(row, abs_path, required_chars=5):
+    # 读图
+    img = Image.open(os.path.join(abs_path, row['img_path'])).convert("RGB")
+
+    # 解析绝对坐标的 location
+    locations = row['location']
+    if isinstance(locations, str):
+        locations = ast.literal_eval(locations)
+
+    # 有放回随机选择 required_chars 个字符
+    picks = random.choices(locations, k=required_chars)
+
+    # 裁剪小图并记录
+    crops = []
+    for item in picks:
+        x1, y1, x2, y2 = map(int, item['p'])
+        crops.append((img.crop((x1, y1, x2, y2)), item['c']))
+
+    # 竖向拼接
+    new_W = max(c.width for c, _ in crops)
+    new_H = sum(c.height for c, _ in crops)
+    canvas = Image.new("RGB", (new_W, new_H), color=(255, 255, 255))
+
+    # 贴图并生成新坐标（基于拼接后的新图）
+    new_locations = []
+    y = 0
+    for crop, ch in crops:
+        canvas.paste(crop, (0, y))
+        new_locations.append({'c': ch, 'p': [0, y, crop.width, y + crop.height]})
+        y += crop.height
+
+    return canvas, new_locations, row['chirography'], row['author']
+
 class CustomImageDataset(Dataset):
     def __init__(self, img_dir, img_size=512, caption_type='json', random_ratio=False, 
             author_descriptions=None, font_scale=0.8, font_size=None, required_chars=5, 
             pred_box=False, to_english=True, txt_dir='./libs/text_clips', ttf_dir='./libs/font', 
-            synth_prob=0.5, data_aug=False, font_descriptions=None):        
+            synth_prob=0.5, data_aug=False, font_descriptions=None, pin_path=None):        
         self.image_path = os.path.join(img_dir, 'images')
         df1 = pd.read_csv(os.path.join(img_dir, 'data1.csv'))
         df2 = pd.read_csv(os.path.join(img_dir, 'data2.csv'))
+
+        self.pin_samples = None
+        self.pin_path = pin_path
+        if pin_path is not None:
+            self.pin_samples = pd.read_csv(os.path.join(pin_path, "dataset.csv"))
+            print('Pin Dataset Length:', len(self.pin_samples))
+
         self.samples = pd.concat([df1, df2], ignore_index=True)
         self.data_aug = data_aug
         self.to_english = to_english
@@ -254,7 +291,7 @@ class CustomImageDataset(Dataset):
 
         # 合成数据参数
         self.synth_prob = synth_prob  # 合成数据占比（概率）
-        self.weights=[float(f'0.{i+1}')-0.01 for i in range(required_chars)]
+        self.weights=[float(f'0.{i+1}')-0.05 for i in range(required_chars)[::-1]]
 
         self.txt_files = [os.path.join(txt_dir, f) for f in os.listdir(txt_dir) if f.endswith('.txt')]
         if not self.txt_files:
@@ -270,14 +307,6 @@ class CustomImageDataset(Dataset):
     def __len__(self):
         return len(self.samples)
     
-    def get_text_tokens(self, texts):
-        return tokenizer(
-            texts,
-            return_tensors="pt",
-            padding="max_length",   # pad 到固定长度
-            max_length=self.required_chars
-        )["input_ids"]
-
     def get_random_text_from_txt(self):
         def is_chinese_char(ch: str) -> bool:
             """判断单字符是否为中文汉字（覆盖常见 CJK 区块）。"""
@@ -321,6 +350,24 @@ class CustomImageDataset(Dataset):
 
         return segment
 
+    # def get_random_text_from_txt(self):
+    #     max_chars = self.required_chars
+    #     weights = self.weights
+    #     assert max_chars == len(weights)
+        
+    #     file_path = random.choice(self.txt_files)
+    #     with open(file_path, 'r', encoding='utf-8') as f:
+    #         text = f.read().strip()
+        
+    #     if len(text) < max_chars:
+    #         return None
+        
+    #     chosen_len = random.choices(range(1, max_chars + 1), weights=weights, k=1)[0]
+    #     start_index = random.randint(0, len(text) - chosen_len)
+    #     segment = text[start_index: start_index + chosen_len]
+
+    #     return segment
+
     def get_condition(self, locations, origin_img_size):
         background_color = (255, 255, 255)  # 白色背景
         text_color = (0, 0, 0)  # 黑色文字
@@ -331,10 +378,8 @@ class CustomImageDataset(Dataset):
         draw = ImageDraw.Draw(img)
         draw_box = ImageDraw.Draw(box_img)
 
-        texts = ''
         for i, loc in enumerate(locations):
             text = loc['c']
-            texts += text
 
             font_space = self.font_size * (1 - self.font_scale) // 2
             font_position = (font_space, self.font_size * i + font_space)
@@ -347,21 +392,29 @@ class CustomImageDataset(Dataset):
                 width=4
             )
     
-        return img, box_img, texts
+        return img, box_img
 
     def get_real_img(self, idx):        
-        img_path = self.samples.iloc[idx]['img_path']
-        if img_path in self.bad_indices:
-            return self.get_real_img(random.randint(0, len(self.samples) - 1))
-        
-        sample_row = self.samples.iloc[idx]
-        img, new_locs, chirography, author = process_image_row(
-            sample_row, 
-            self.image_path, 
-            required_chars=self.required_chars, 
-            col_threshold=50,
-            padding=50,
-        )
+        if random.random() < 0.1 and self.pin_samples is not None: # only for wangxizhi generalize
+            sample_row = self.pin_samples.iloc[idx%len(self.pin_samples)]
+            img, new_locs, chirography, author = process_pin_image_row(
+                sample_row, 
+                self.pin_path, 
+                required_chars=self.required_chars, 
+            )
+        else:
+            img_path = self.samples.iloc[idx]['img_path']
+            if img_path in self.bad_indices:
+                return self.get_real_img(random.randint(0, len(self.samples) - 1))
+            
+            sample_row = self.samples.iloc[idx]
+            img, new_locs, chirography, author = process_image_row(
+                sample_row, 
+                self.image_path, 
+                required_chars=self.required_chars, 
+                col_threshold=50,
+                padding=50,
+            )
 
         if new_locs is None:
             # print(f"No valid characters found in the image: {img_path}.")
@@ -387,7 +440,7 @@ class CustomImageDataset(Dataset):
         else:
             prompt += f' author: {convert_to_pinyin(author)}.'
         
-        cond_img, box_img, texts = self.get_condition(new_locs, img.size)
+        cond_img, box_img = self.get_condition(new_locs, img.size)
         # cond_img.save('debug_cond.png'); img.save('debug.png')
         
         img = img.resize(self.img_size, Image.LANCZOS)
@@ -411,7 +464,7 @@ class CustomImageDataset(Dataset):
             img = torch.cat((img, box_img), dim=2)
             cond_img = torch.cat((cond_img, torch.zeros_like(cond_img)), dim=2)
 
-        return img, prompt, cond_img, texts
+        return img, prompt, cond_img
 
     def get_syn_img(self):
         if random.random() < 0.5:
@@ -448,18 +501,14 @@ class CustomImageDataset(Dataset):
         else:
             raise ValueError(f"Unsupported font style: {font_style}")
 
-        return img, prompt, cond_img, texts
+        return img, prompt, cond_img
 
     def __getitem__(self, idx):
         try:
             if random.random() < self.synth_prob:  # get synthetic data
-                img, prompt, cond_img, texts = self.get_syn_img()
+                return self.get_syn_img()
             else:
-                img, prompt, cond_img, texts = self.get_real_img(idx)
-
-            text_token = self.get_text_tokens(texts).squeeze(0)
-            return img, prompt, cond_img, text_token
-        
+                return self.get_real_img(idx)
         except Exception as e:
             print(e)
             return self.__getitem__(random.randint(0, len(self.samples) - 1))
@@ -489,15 +538,14 @@ if __name__ == '__main__':
             json.dump(error_indices, f)
 
     def get_item(dataset, index):
-        image, caption, condition_img, texts_tokens, texts_latents = dataset[index]
+        image, caption, condition_img = dataset[index]
         image = (image.permute(1, 2, 0) + 1).numpy() * 127.5
         condition_img = (condition_img.permute(1, 2, 0) + 1).numpy() * 127.5
         image = Image.fromarray(image.astype(np.uint8))
         condition_img = Image.fromarray(condition_img.astype(np.uint8))
         # image.save(f'ckpts/img_{index}.png'); condition_img.save(f'ckpts/cond_{index}.png')
-        # image.save(f'test_data/debug/img_{index}.png'); condition_img.save(f'test_data/debug/cond_{index}.png')
+        image.save(f'test_data/debug/img_{index}.png'); condition_img.save(f'test_data/debug/cond_{index}.png')
         print(caption)
-        print(texts_tokens.shape, texts_latents.shape)
         
     dataset = CustomImageDataset(
         './word_dataset/finalpage',
@@ -506,10 +554,11 @@ if __name__ == '__main__':
         txt_dir='./libs/text_clips',
         ttf_dir='./libs/font',
         to_english=True,
-        synth_prob=0.5,
+        synth_prob=0.0,
         data_aug=True,
         author_descriptions="./word_dataset/calligraphy_styles_en.json",
         font_descriptions="./word_dataset/chirography.json",
+        pin_path="/data/user/txu647/code/flux-calligraphy/word_dataset/image_pinjie2"
         )
 
     # find_error_indices(dataset, 'error_indices_chars5.json')

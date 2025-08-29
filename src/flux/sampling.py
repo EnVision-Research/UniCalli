@@ -111,7 +111,8 @@ def denoise(
     # sampling parameters
     timesteps: list[float],
     guidance: float = 4.0,
-    cond_latent = None,
+    cond_latent: Tensor=None, 
+    cond_txt_latent: Tensor=None, 
     true_gs = 1,
     timestep_to_start_cfg=0,
     # ip-adapter parameters
@@ -120,35 +121,31 @@ def denoise(
     ip_scale: Tensor | float = 1.0,
     neg_ip_scale: Tensor | float = 1.0,
     is_generation: bool = True,
+    embed_token_weight: Tensor=None, 
 ):
     i = 0
+    embed_token_weight = embed_token_weight.to(img.device, img.dtype)
     # this is ignored for schnell
     guidance_vec = torch.full((img.shape[0],), guidance, device=img.device, dtype=img.dtype)
     t_0_vec = torch.full((img.shape[0],), timesteps[-1], dtype=img.dtype, device=img.device)
-    # img, _ = img.chunk(2, dim=1) if cond_latent is not None else (img, None)
 
     for t_curr, t_prev in zip(timesteps[:-1], timesteps[1:]):
         t_vec = torch.full((img.shape[0],), t_curr, dtype=img.dtype, device=img.device)
         if cond_latent is not None:
             _, c, h, w = cond_latent.shape
             assert h * w // 4 == img.shape[1] and c * 4 == img.shape[2]  # tianshuo
-            # img = rearrange(img, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h // 2, w=w // 2, ph=2, pw=2)
             cond = rearrange(cond_latent, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
 
             if is_generation:
                 img = torch.cat((img, cond.to(img.dtype)), dim=1)
-                # img = rearrange(img, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
-                # img = torch.cat((img, cond.to(img.dtype)), dim=1)
                 t1 = t_vec
                 t2 = t_0_vec
             else:
                 img = torch.cat((cond.to(img.dtype), img), dim=1)
-                # img = rearrange(img, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
-                # img = torch.cat((cond.to(img.dtype), img), dim=1)
                 t1 = t_0_vec
                 t2 = t_vec
 
-        pred = model(
+        pred, text_pred_token = model(
             img=img,
             img_ids=img_ids,
             txt=txt,
@@ -156,12 +153,16 @@ def denoise(
             y=vec,
             timesteps=t1,
             timesteps2=t2,
+            cond_txt_latent=cond_txt_latent,
             guidance=guidance_vec,
             image_proj=image_proj,
             ip_scale=ip_scale, 
         )
+        if not is_generation:
+            text_pred = torch.matmul(text_pred_token, embed_token_weight)
+
         if i >= timestep_to_start_cfg:
-            neg_pred = model(
+            neg_pred, neg_text_pred_token = model(
                 img=img,
                 img_ids=img_ids,
                 txt=neg_txt,
@@ -169,11 +170,15 @@ def denoise(
                 y=neg_vec,
                 timesteps=t1,
                 timesteps2=t2,
+                cond_txt_latent=cond_txt_latent,
                 guidance=guidance_vec, 
                 image_proj=neg_image_proj,
                 ip_scale=neg_ip_scale, 
             )     
             pred = neg_pred + true_gs * (pred - neg_pred)
+            if not is_generation:
+                neg_text_pred = torch.matmul(neg_text_pred_token, embed_token_weight)
+                text_pred = neg_text_pred + true_gs * (text_pred - neg_text_pred)
         
         if cond_latent is not None:
             # img = rearrange(img, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h // 2, w=w, ph=2, pw=2)
@@ -188,9 +193,11 @@ def denoise(
             # pred = rearrange(pred, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
 
         img = img + (t_prev - t_curr) * pred
+        if not is_generation: # update cond_txt_latent only in recognition mode
+            cond_txt_latent = cond_txt_latent + (t_prev - t_curr) * text_pred
         i += 1
 
-    return img
+    return img, text_pred_token.argmax(dim=-1)
 
 def denoise_controlnet(
     model: Flux,

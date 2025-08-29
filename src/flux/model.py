@@ -78,10 +78,20 @@ class Flux(nn.Module):
         self.gradient_checkpointing = False
 
         self.module_embeddings = None
+        self.cond_txt_in = None
+        self.cond_txt_out = None
     
-    def init_module_embeddings(self, tokens_num: int):
+    def init_module_embeddings(self, tokens_num: int, cond_txt_channel=896, # internVLM 
+                               text_emb_dim=151674, rank=896, cond_txt_length=5):
         self.module_embeddings = nn.Parameter(torch.zeros(1, tokens_num, self.hidden_size))
+        self.cond_txt_in = nn.Linear(cond_txt_channel, self.hidden_size)
+        self.cond_txt_out1 = nn.Linear(self.hidden_size, rank)  # low rank
+        self.cond_txt_out2 = nn.Linear(rank, text_emb_dim)
+        self.learnable_txt_ids = nn.Parameter(torch.zeros(1, 512, 3))
 
+        nn.init.zeros_(self.cond_txt_out2.weight)
+        nn.init.zeros_(self.cond_txt_out2.bias)
+        
     def _set_gradient_checkpointing(self, module, value=False):
         if hasattr(module, "gradient_checkpointing"):
             module.gradient_checkpointing = value
@@ -148,6 +158,7 @@ class Flux(nn.Module):
         y: Tensor,
         timesteps: Tensor,
         timesteps2: Tensor | None = None,
+        cond_txt_latent: Tensor | None = None,
         block_controlnet_hidden_states=None,
         guidance: Tensor | None = None,
         image_proj: Tensor | None = None, 
@@ -163,6 +174,11 @@ class Flux(nn.Module):
             img0 = img0 + self.module_embeddings
             img = torch.cat((img0, img1), dim=1)
         vec = self.time_in(timestep_embedding(timesteps, 256))
+
+        if cond_txt_latent is not None:
+            assert self.cond_txt_in is not None
+            cond_txt = self.cond_txt_in(cond_txt_latent)
+            cond_txt_length = cond_txt.shape[1]
         
         if timesteps2 is not None:
             vec2 = self.time_in(timestep_embedding(timesteps2, 256))
@@ -184,7 +200,12 @@ class Flux(nn.Module):
             vec2 = vec2 + self.vector_in(y)
         txt = self.txt_in(txt)
 
-        ids = torch.cat((txt_ids, img_ids), dim=1)
+        if cond_txt_latent is not None:
+            # 把txt尾部替换为cond_txt，后面blocks里会专门给txt t_cond做adaLN
+            txt[:, -cond_txt_length:] = cond_txt  # [1, 5, 3072]
+            txt_ids += self.learnable_txt_ids
+
+        ids = torch.cat((txt_ids, img_ids), dim=1)  # [1, 512, 3072], [1, 640, 3072]
         pe = self.pe_embedder(ids)
         if block_controlnet_hidden_states is not None:
             controlnet_depth = len(block_controlnet_hidden_states)
@@ -246,10 +267,15 @@ class Flux(nn.Module):
                     vec,
                     vec2,
                     pe,
+                    txt.shape[1]
                 )
             else:
-                img = block(img, vec=vec, vec2=vec2, pe=pe)
-        img = img[:, txt.shape[1] :, ...]
+                img = block(img, vec=vec, vec2=vec2, pe=pe, text_length=txt.shape[1])
 
+        if cond_txt_latent is not None:
+            cond_txt = img[:, txt.shape[1]-cond_txt_length:txt.shape[1], ...]
+            cond_txt = self.cond_txt_out2(self.cond_txt_out1(cond_txt))
+
+        img = img[:, txt.shape[1]:, ...]
         img = self.final_layer(img, vec, vec2)  # (N, T, patch_size ** 2 * out_channels)
-        return img
+        return img, cond_txt

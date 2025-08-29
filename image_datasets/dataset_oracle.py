@@ -11,9 +11,16 @@ import ast
 from pypinyin import lazy_pinyin
 import json
 import cv2
-from transformers import AutoTokenizer
+from transformers import AutoModel, AutoTokenizer
 
 path = "/data/user/txu647/.cache/InternVL3-1B"
+
+embed_tokens = AutoModel.from_pretrained(
+    path,
+    torch_dtype=torch.float32,   # CPU 一般用 float32，更安全
+    device_map="cpu",            # 强制全部放在 CPU
+    trust_remote_code=True
+).language_model.model.embed_tokens.eval()
 tokenizer = AutoTokenizer.from_pretrained(path, trust_remote_code=True, use_fast=False)
 
 
@@ -457,8 +464,9 @@ class CustomImageDataset(Dataset):
             else:
                 img, prompt, cond_img, texts = self.get_real_img(idx)
 
-            text_token = self.get_text_tokens(texts).squeeze(0)
-            return img, prompt, cond_img, text_token
+            text_tokens = self.get_text_tokens(texts)
+            text_latent = embed_tokens(text_tokens)
+            return img, prompt, cond_img, text_tokens, text_latent
         
         except Exception as e:
             print(e)
