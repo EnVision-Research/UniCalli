@@ -81,16 +81,14 @@ class Flux(nn.Module):
         self.cond_txt_in = None
         self.cond_txt_out = None
     
-    def init_module_embeddings(self, tokens_num: int, cond_txt_channel=896, # internVLM 
-                               text_emb_dim=151674, rank=896, cond_txt_length=5):
+    def init_module_embeddings(self, tokens_num: int, cond_txt_channel=896):
         self.module_embeddings = nn.Parameter(torch.zeros(1, tokens_num, self.hidden_size))
         self.cond_txt_in = nn.Linear(cond_txt_channel, self.hidden_size)
-        self.cond_txt_out1 = nn.Linear(self.hidden_size, rank)  # low rank
-        self.cond_txt_out2 = nn.Linear(rank, text_emb_dim)
+        self.cond_txt_out = nn.Linear(self.hidden_size, cond_txt_channel)
         self.learnable_txt_ids = nn.Parameter(torch.zeros(1, 512, 3))
 
-        nn.init.zeros_(self.cond_txt_out2.weight)
-        nn.init.zeros_(self.cond_txt_out2.bias)
+        nn.init.zeros_(self.cond_txt_out.weight)
+        nn.init.zeros_(self.cond_txt_out.bias)
         
     def _set_gradient_checkpointing(self, module, value=False):
         if hasattr(module, "gradient_checkpointing"):
@@ -274,7 +272,7 @@ class Flux(nn.Module):
 
         if cond_txt_latent is not None:
             cond_txt = img[:, txt.shape[1]-cond_txt_length:txt.shape[1], ...]
-            cond_txt = self.cond_txt_out2(self.cond_txt_out1(cond_txt))
+            cond_txt = self.cond_txt_out(cond_txt)
 
         img = img[:, txt.shape[1]:, ...]
         img = self.final_layer(img, vec, vec2)  # (N, T, patch_size ** 2 * out_channels)

@@ -145,7 +145,7 @@ def denoise(
                 t1 = t_0_vec
                 t2 = t_vec
 
-        pred, text_pred_token = model(
+        pred, text_pred = model(
             img=img,
             img_ids=img_ids,
             txt=txt,
@@ -158,11 +158,9 @@ def denoise(
             image_proj=image_proj,
             ip_scale=ip_scale, 
         )
-        if not is_generation:
-            text_pred = torch.matmul(text_pred_token, embed_token_weight)
 
         if i >= timestep_to_start_cfg:
-            neg_pred, neg_text_pred_token = model(
+            neg_pred, neg_text_pred = model(
                 img=img,
                 img_ids=img_ids,
                 txt=neg_txt,
@@ -177,27 +175,24 @@ def denoise(
             )     
             pred = neg_pred + true_gs * (pred - neg_pred)
             if not is_generation:
-                neg_text_pred = torch.matmul(neg_text_pred_token, embed_token_weight)
                 text_pred = neg_text_pred + true_gs * (text_pred - neg_text_pred)
         
         if cond_latent is not None:
-            # img = rearrange(img, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h // 2, w=w, ph=2, pw=2)
-            # pred = rearrange(pred, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h // 2, w=w, ph=2, pw=2)
             if is_generation:
                 img = img.chunk(2, dim=1)[0]
                 pred = pred.chunk(2, dim=1)[0]
             else:
                 img = img.chunk(2, dim=1)[1]
                 pred = pred.chunk(2, dim=1)[1]
-            # img = rearrange(img, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
-            # pred = rearrange(pred, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
 
         img = img + (t_prev - t_curr) * pred
         if not is_generation: # update cond_txt_latent only in recognition mode
             cond_txt_latent = cond_txt_latent + (t_prev - t_curr) * text_pred
         i += 1
 
-    return img, text_pred_token.argmax(dim=-1)
+    text_pred = torch.nn.functional.normalize(text_pred, dim=-1)
+    EW = torch.nn.functional.normalize(embed_token_weight, dim=-1)
+    return img, (text_pred @ EW.t()).argmax(dim=-1)
 
 def denoise_controlnet(
     model: Flux,

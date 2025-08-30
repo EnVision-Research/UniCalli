@@ -209,7 +209,6 @@ def main():
         weight_dtype = torch.bfloat16
         args.mixed_precision = accelerator.mixed_precision
 
-
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
     if overrode_max_train_steps:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
@@ -242,7 +241,7 @@ def main():
             with accelerator.accumulate(dit):
                 img, prompts, cond_image, text_token = batch
                 text_latent = embed_tokens(text_token).to(accelerator.device)
-                
+
                 if print_shape_flag:
                     print_shape_flag = False
                     print(f"img shape: {img.shape}")
@@ -290,7 +289,7 @@ def main():
                 guidance_vec = torch.full((x_t.shape[0],), 4, device=x_t.device, dtype=x_t.dtype)
 
                 # Predict the noise residual and compute loss
-                model_pred, txt_logits = dit(img=x_t.to(weight_dtype),
+                model_pred, txt_pred = dit(img=x_t.to(weight_dtype),
                                 img_ids=inp['img_ids'].to(weight_dtype),
                                 txt=inp['txt'].to(weight_dtype),
                                 txt_ids=inp['txt_ids'].to(weight_dtype),
@@ -306,10 +305,7 @@ def main():
 
                 loss_img = F.mse_loss(img_pred.float(), (x_0 - x_1).float(), reduction="mean")
                 loss_cond = 0.5 * F.mse_loss(cond_pred.float(), (cond_0 - cond_latent).float(), reduction="mean")
-                
-                emb_token_weights = emb_token_weights.to(txt_logits.device, txt_logits.dtype)
-                text_pred = torch.matmul(txt_logits, emb_token_weights)
-                loss_cond_txt = 0.1 * F.mse_loss(text_pred.float(), (cond_txt_0 - text_latent).float(), reduction="mean")
+                loss_cond_txt = 0.5 * F.mse_loss(txt_pred.float(), (cond_txt_0 - text_latent).float(), reduction="mean")
 
                 if mode == 'img':
                     loss = loss_img + 0.01 * loss_cond + 0.01 * loss_cond_txt
