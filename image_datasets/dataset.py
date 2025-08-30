@@ -88,10 +88,10 @@ def binarize_auto_polarity(
     score_A = _score_mask(cand_A, edges, target_fg_range)
     score_B = _score_mask(cand_B, edges, target_fg_range)
 
-    if score_A >= score_B:
-        return 255 - cand_A, "white"   # 背景为白
+    if score_A >= score_B:  # 都返回黑色背景，白色文字
+        return cand_A, "black"
     else:
-        return cand_B, "black"   # 背景为黑
+        return cand_B, "black"
 
 def convert_to_pinyin(text, with_tone=False):
     return ' '.join([item[0] if isinstance(item, list) else item for item in lazy_pinyin(text)])

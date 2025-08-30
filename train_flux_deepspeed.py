@@ -309,7 +309,7 @@ def main():
                 
                 emb_token_weights = emb_token_weights.to(txt_logits.device, txt_logits.dtype)
                 text_pred = torch.matmul(txt_logits, emb_token_weights)
-                loss_cond_txt = 0.5 * F.mse_loss(text_pred.float(), (cond_txt_0 - text_latent).float(), reduction="mean")
+                loss_cond_txt = 0.1 * F.mse_loss(text_pred.float(), (cond_txt_0 - text_latent).float(), reduction="mean")
 
                 if mode == 'img':
                     loss = loss_img + 0.01 * loss_cond + 0.01 * loss_cond_txt
@@ -383,7 +383,7 @@ def main():
                                             required_chars=5
                                             )
                             # images.append(wandb.Image(result))
-                            result.save(f"{args.output_dir}/validation/{global_step}/sp_gen_{idx}.png")
+                            result.save(f"{args.output_dir}/validation/{global_step}/sp_gen_{idx}_{cond_text}.png")
 
                         for i, prompt in enumerate(args.sample_prompts[:8]):
                             # generation
