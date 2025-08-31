@@ -25,6 +25,7 @@ weights/
 
 ckpts/
 word_dataset/
+unifont/
 wandb/
 libs/
 test_data/

@@ -24,4 +24,4 @@ img = get_cond_data(
     font_scale
 )
 
-img.save("/data/user/txu647/code/flux-calligraphy/test_data/debug/c.png")
+img.save("/data/user/txu647/code/flux-calligraphy/test_data/ccc.png")
