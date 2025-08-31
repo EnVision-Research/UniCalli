@@ -51,8 +51,10 @@ class CustomImageDataset(Dataset):
                     self.samples.append(sample)
         else:
             self.samples = samples
-        print('Dataset length:', len(self.samples))
 
+        print('Dataset length:', len(self.samples))
+        print('Use undeciphered data:', use_undeciphered)
+        
         # ./word_dataset/HUST-OBC/deciphered/ID_to_chinese.json
         json_path_1 = os.path.join(img_dir, 'deciphered', 'ID_to_chinese.json')
         with open(json_path_1, 'r', encoding='utf-8') as f:
@@ -149,7 +151,7 @@ class CustomImageDataset(Dataset):
             return self.__getitem__(random.randint(0, len(self.samples) - 1))
 
 
-def oracle_loader(train_batch_size, num_workers, **args):
+def loader(train_batch_size, num_workers, **args):
     dataset = CustomImageDataset(**args)
     return DataLoader(dataset, batch_size=train_batch_size, num_workers=num_workers, shuffle=True)
 

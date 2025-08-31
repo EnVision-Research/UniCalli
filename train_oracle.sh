@@ -6,7 +6,7 @@ export HF_HUB_OFFLINE=1
 export DISABLE_TELEMETRY=YES
 export WANDB_MODEL=offline
 
-accelerate launch --config_file 8.yaml train_flux_deepspeed_v3.1.py --config "train_configs/test_finetune.yaml"
+accelerate launch --config_file 8.yaml train_flux_deepspeed_v3.1_oracle.py --config "train_configs/test_finetune_oracle.yaml"
 
 # --config_file 0.yaml
 # bash train.sh
