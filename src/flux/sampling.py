@@ -186,7 +186,7 @@ def denoise(
                 pred = pred.chunk(2, dim=1)[1]
 
         img = img + (t_prev - t_curr) * pred
-        if not is_generation: # update cond_txt_latent only in recognition mode
+        if not is_generation and cond_txt_latent is not None: # update cond_txt_latent only in recognition mode
             cond_txt_latent = cond_txt_latent + (t_prev - t_curr) * text_pred
         i += 1
 

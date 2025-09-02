@@ -104,7 +104,7 @@ def main():
 
     dit, vae, t5, clip = get_models(name=args.model_name, device=accelerator.device, offload=False, is_schnell=is_schnell)
 
-    dit.init_module_embeddings(320)
+    dit.init_module_embeddings(tokens_num=64)
     vae.requires_grad_(False)
     t5.requires_grad_(False)
     clip.requires_grad_(False)
@@ -119,7 +119,7 @@ def main():
         trust_remote_code=True
     ).language_model.model.embed_tokens.eval()
     embed_tokens.requires_grad_(False)
-    emb_token_weights = embed_tokens.weight.clone().detach()  #  detach: requires_grad False
+    # emb_token_weights = embed_tokens.weight.clone().detach()  #  detach: requires_grad False
 
     optimizer_cls = torch.optim.AdamW
     #you can train your own layers
@@ -339,16 +339,16 @@ def main():
                         sampler = XFluxSampler(clip=clip, t5=t5, ae=vae, 
                                 model=dit, device=accelerator.device, intern_vlm_path=intern_path)
                         # images = []
-                        with open("test_data/test_en_gen/cond.txt", "r", encoding="utf-8") as f:
+                        with open("test_data/oracle/cond.txt", "r", encoding="utf-8") as f:
                             text = f.read()
                         cond_text_list = text.splitlines()
 
-                        for i, prompt in enumerate(args.sample_prompts[:8]):
-                            print(prompt)
+                        for i, prompt in enumerate(args.sample_prompts):
                             # generation
                             idx = i
                             cond_text = cond_text_list[i]
-                            cond_image = Image.open(f'test_data/test_en_gen/cond_{idx}.png')
+                            print('cond_text:', cond_text)
+                            cond_image = Image.open(f'test_data/oracle/cond_{idx}.png')
                             # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
                             result, _ = sampler(prompt=prompt,
                                             width=args.sample_width,
@@ -362,29 +362,10 @@ def main():
                             # images.append(wandb.Image(result))
                             result.save(f"{args.output_dir}/validation/{global_step}/gen_{idx}.png")
 
-                        for i, prompt in enumerate(args.sample_prompts[8:]):
-                            # generation
-                            print(prompt)
+                        for i, prompt in enumerate(args.sample_prompts):
+                            # recognition
                             idx = i
-                            cond_image = Image.open(f'test_data/c.png')
-                            cond_text = "生日快乐喵"
-                            # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
-                            result, _ = sampler(prompt=prompt,
-                                            width=args.sample_width,
-                                            height=args.sample_height,
-                                            num_steps=args.sample_steps,
-                                            controlnet_image=cond_image,
-                                            is_generation=True, 
-                                            cond_text=cond_text,
-                                            required_chars=5
-                                            )
-                            # images.append(wandb.Image(result))
-                            result.save(f"{args.output_dir}/validation/{global_step}/sp_gen_{idx}_{cond_text}.png")
-
-                        for i, prompt in enumerate(args.sample_prompts[:8]):
-                            # generation
-                            idx = i
-                            cond_image = Image.open(f'test_data/test_en_rec/img_{idx}.png')
+                            cond_image = Image.open(f'test_data/oracle/img_{idx}.png')
                             # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
                             result, text = sampler(prompt=prompt,
                                             width=args.sample_width,
@@ -395,7 +376,10 @@ def main():
                                             required_chars=5
                                             )
                             # images.append(wandb.Image(result))
-                            result.save(f"{args.output_dir}/validation/{global_step}/rec_{idx}_{text}.png")
+                            try:
+                                result.save(f"{args.output_dir}/validation/{global_step}/rec_{idx}_{text[0]}.png")
+                            except:
+                                result.save(f"{args.output_dir}/validation/{global_step}/rec_{idx}.png")
                         # wandb.log({f"Results, step {global_step}": images})
 
                 if global_step % args.checkpointing_steps == 0:

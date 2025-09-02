@@ -129,7 +129,13 @@ def main():
         #     param.requires_grad = False
         # if 'attn' not in n:
         #     param.requires_grad = False
+        # else:
+        #     param.requires_grad = True
+            
     # dit.module_embeddings.requires_grad_(True)
+    # dit.cond_txt_in.requires_grad_(True)
+    # dit.cond_txt_out.requires_grad_(True)
+    # dit.learnable_txt_ids.requires_grad_(True)
 
     print(sum([p.numel() for p in dit.parameters() if p.requires_grad]) / 1000000, 'M parameters')
     optimizer = optimizer_cls(
@@ -395,7 +401,10 @@ def main():
                                             required_chars=5
                                             )
                             # images.append(wandb.Image(result))
-                            result.save(f"{args.output_dir}/validation/{global_step}/rec_{idx}_{text}.png")
+                            try:
+                                result.save(f"{args.output_dir}/validation/{global_step}/rec_{idx}_{text}.png")
+                            except:
+                                result.save(f"{args.output_dir}/validation/{global_step}/rec_{idx}_bad.png")
                         # wandb.log({f"Results, step {global_step}": images})
 
                 if global_step % args.checkpointing_steps == 0:

@@ -87,6 +87,8 @@ class Flux(nn.Module):
         self.cond_txt_out = nn.Linear(self.hidden_size, cond_txt_channel)
         self.learnable_txt_ids = nn.Parameter(torch.zeros(1, 512, 3))
 
+        nn.init.zeros_(self.cond_txt_in.weight)
+        nn.init.zeros_(self.cond_txt_in.bias)
         nn.init.zeros_(self.cond_txt_out.weight)
         nn.init.zeros_(self.cond_txt_out.bias)
         

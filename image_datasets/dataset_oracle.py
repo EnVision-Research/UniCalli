@@ -168,6 +168,7 @@ if __name__ == '__main__':
         image.save(f'test_data/oracle/img_{i}.png'); condition_img.save(f'test_data/oracle/cond_{i}.png')
         print(caption)
         print(texts_tokens)
+        return tokenizer.decode(texts_tokens)[0]
         
     dataset = CustomImageDataset(
         './word_dataset/HUST-OBC',
@@ -177,7 +178,8 @@ if __name__ == '__main__':
 
     
     # for i in range(len(dataset)):
+    cond_txt = []
     for i in range(8):
-        get_item(dataset, i)
+        cond_txt.append(get_item(dataset, i))
         # breakpoint()
-    
+    print(cond_txt)
