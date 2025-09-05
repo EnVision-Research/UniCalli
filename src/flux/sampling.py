@@ -125,6 +125,7 @@ def denoise(
 ):
     i = 0
     embed_token_weight = embed_token_weight.to(img.device, img.dtype)
+    assert cond_txt_latent is not None
     # this is ignored for schnell
     guidance_vec = torch.full((img.shape[0],), guidance, device=img.device, dtype=img.dtype)
     t_0_vec = torch.full((img.shape[0],), timesteps[-1], dtype=img.dtype, device=img.device)
@@ -160,7 +161,7 @@ def denoise(
         )
 
         if i >= timestep_to_start_cfg:
-            neg_pred, neg_text_pred = model(
+            neg_pred, _ = model(
                 img=img,
                 img_ids=img_ids,
                 txt=neg_txt,
@@ -174,9 +175,7 @@ def denoise(
                 ip_scale=neg_ip_scale, 
             )     
             pred = neg_pred + true_gs * (pred - neg_pred)
-            if not is_generation:
-                text_pred = neg_text_pred + true_gs * (text_pred - neg_text_pred)
-        
+
         if cond_latent is not None:
             if is_generation:
                 img = img.chunk(2, dim=1)[0]
@@ -186,13 +185,15 @@ def denoise(
                 pred = pred.chunk(2, dim=1)[1]
 
         img = img + (t_prev - t_curr) * pred
-        if not is_generation and cond_txt_latent is not None: # update cond_txt_latent only in recognition mode
+        if not is_generation: # update cond_txt_latent only in recognition mode
             cond_txt_latent = cond_txt_latent + (t_prev - t_curr) * text_pred
         i += 1
 
-    text_pred = torch.nn.functional.normalize(text_pred, dim=-1)
+    cond_txt_latent = torch.nn.functional.normalize(cond_txt_latent, dim=-1)
     EW = torch.nn.functional.normalize(embed_token_weight, dim=-1)
-    return img, (text_pred @ EW.t()).argmax(dim=-1)
+    scores = cond_txt_latent @ EW.t()
+    text_top_k, _ = scores.topk(5, dim=-1)
+    return img, text_top_k
 
 def denoise_controlnet(
     model: Flux,

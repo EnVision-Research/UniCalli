@@ -41,7 +41,7 @@ from src.flux.util import (configs, load_ae, load_clip,
                        load_flow_model2, load_t5)
 from src.flux.xflux_pipeline import XFluxSampler
 from image_datasets.dataset import loader
-from image_datasets.dataset_oracle import oracle_loader
+# from image_datasets.dataset_oracle import oracle_loader
 
 if is_wandb_available():
     import wandb
@@ -141,11 +141,11 @@ def main():
         eps=args.adam_epsilon,
     )
 
-    if hasattr(args, "is_oracle") and args.is_oracle:
-        print("!!!!!!!!!!!!!!!!!!is oracle!!!!!!!!!!!!!!")
-        train_dataloader = oracle_loader(**args.data_config)
-    else:
-        train_dataloader = loader(**args.data_config)
+    # if hasattr(args, "is_oracle") and args.is_oracle:
+    #     print("!!!!!!!!!!!!!!!!!!is oracle!!!!!!!!!!!!!!")
+    #     train_dataloader = oracle_loader(**args.data_config)
+    # else:
+    train_dataloader = loader(**args.data_config)
     # Scheduler and math around the number of training steps.
     overrode_max_train_steps = False
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
@@ -316,8 +316,65 @@ def main():
                     loss = loss_img + 0.01 * loss_cond + 0.01 * loss_cond_txt
                 else:
                     loss = loss_cond + loss_cond_txt + 0.01 * loss_img
-                # loss = F.mse_loss(model_pred.float(), (x_0 - x_1).float(), reduction="mean")
 
+                # consistent loss, total reverse
+                img_pred_x1 = x_0 - img_pred
+                cond_pred_x1 = cond_0 - cond_pred
+                txt_pred_x1 = cond_txt_0 - txt_pred
+                
+                if mode == 'img':  # pred cond, by given pure img
+                    t_cond = torch.sigmoid(torch.randn((1,), device=accelerator.device))
+                    t = torch.zeros_like(t_cond).to(accelerator.device)
+                else:
+                    t = torch.sigmoid(torch.randn((1,), device=accelerator.device))
+                    t_cond = torch.zeros_like(t).to(accelerator.device)
+                    
+                x_0 = torch.randn_like(img_pred_x1).to(accelerator.device)
+                x_t = (1 - t) * img_pred_x1 + t * x_0
+                b, c, h, w = x_t.shape
+                
+                cond_0 = torch.randn_like(cond_pred_x1).to(accelerator.device)
+                cond_t = (1 - t_cond) * cond_pred_x1 + t_cond * cond_0
+
+                cond_txt_0 = torch.randn_like(txt_pred_x1).to(accelerator.device)
+                cond_txt_t = (1 - t_cond) * txt_pred_x1 + t_cond * cond_txt_0
+                # x_t = torch.cat((x_t, cond_t), dim=3)
+                
+                x_t = rearrange(x_t, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+                cond_t = rearrange(cond_t, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+                x_t = torch.cat((x_t, cond_t), dim=1)
+                # b, c, h, w = x_t.shape
+                # x_t = rearrange(x_t, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+
+                bsz = img_pred_x1.shape[0]
+                guidance_vec = torch.full((x_t.shape[0],), 4, device=x_t.device, dtype=x_t.dtype)
+
+                with torch.inference_mode():
+                    model_pred, txt_pred = dit(img=x_t.detach().to(weight_dtype),
+                                    img_ids=inp['img_ids'].to(weight_dtype),
+                                    txt=inp['txt'].to(weight_dtype),
+                                    txt_ids=inp['txt_ids'].to(weight_dtype),
+                                    cond_txt_latent=cond_txt_t.detach().to(weight_dtype),
+                                    y=inp['vec'].to(weight_dtype),
+                                    timesteps=t.to(weight_dtype),
+                                    timesteps2=t_cond.to(weight_dtype),
+                                    guidance=guidance_vec.to(weight_dtype),)
+
+                    img_pred, cond_pred = model_pred.chunk(2, dim=1)
+                    img_pred = rearrange(img_pred, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h//2, w=w//2, ph=2, pw=2)
+                    cond_pred = rearrange(cond_pred, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h//2, w=w//2, ph=2, pw=2)
+
+                loss_img_c = F.mse_loss(img_pred.float(), (x_0 - img_pred_x1).float(), reduction="mean")
+                loss_cond_c = 0.5 * F.mse_loss(cond_pred.float(), (cond_0 - cond_pred_x1).float(), reduction="mean")
+                loss_cond_txt_c = 0.5 * F.mse_loss(txt_pred.float(), (cond_txt_0 - txt_pred_x1).float(), reduction="mean")
+
+                if mode == 'img':
+                    loss_c = loss_cond_c + loss_cond_txt_c + 0.01 * loss_img_c
+                else:
+                    loss_c = loss_img_c + 0.01 * loss_cond_c + 0.01 * loss_cond_txt_c
+                
+                loss = loss + 0.3 * loss_c
+                
                 # Gather the losses across all processes for logging (if we use distributed training).
                 avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()
                 train_loss += avg_loss.item() / args.gradient_accumulation_steps

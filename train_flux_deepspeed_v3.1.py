@@ -311,7 +311,7 @@ def main():
 
                 loss_img = F.mse_loss(img_pred.float(), (x_0 - x_1).float(), reduction="mean")
                 loss_cond = 0.5 * F.mse_loss(cond_pred.float(), (cond_0 - cond_latent).float(), reduction="mean")
-                loss_cond_txt = 0.5 * F.mse_loss(txt_pred.float(), (cond_txt_0 - text_latent).float(), reduction="mean")
+                loss_cond_txt = 0.05 * F.mse_loss(txt_pred.float(), (cond_txt_0 - text_latent).float(), reduction="mean")
 
                 if mode == 'img':
                     loss = loss_img + 0.01 * loss_cond + 0.01 * loss_cond_txt

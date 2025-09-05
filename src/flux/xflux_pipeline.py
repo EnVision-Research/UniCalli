@@ -386,8 +386,16 @@ class XFluxPipeline:
         x1 = x.clamp(-1, 1)
         x1 = rearrange(x1[-1], "c h w -> h w c")
         output_img = Image.fromarray((127.5 * (x1 + 1.0)).cpu().byte().numpy())
-        assert text_token.shape[0] == 1
-        text = self.tokenizer.decode(text_token.squeeze(0))
+
+        B, N, k = text_token.shape
+        assert B == 1
+        ids_flat = text_token.squeeze(0).reshape(-1).tolist()             # [N*k]
+        seqs = [[i] for i in ids_flat]                                  # batch_decode 需要 list[list[int]]
+        decoded_flat = self.tokenizer.batch_decode(
+            seqs, skip_special_tokens=True, clean_up_tokenization_spaces=False
+        )                                                               # 长度 N*k
+        text = [decoded_flat[i:i+k] for i in range(0, len(decoded_flat), k)]
+        
         return output_img, text
 
     def offload_model_to_cpu(self, *models):

@@ -1,28 +1,15 @@
-from transformers import AutoModel, AutoTokenizer, AutoConfig
 import torch
-import time
+from einops import rearrange
 
-texts = '仁义礼'  # assert None token: 1294
-path = "/data/user/txu647/.cache/InternVL3-1B"
-embed_tokens = AutoModel.from_pretrained(
-    path,
-    torch_dtype=torch.float32,   # CPU 一般用 float32，更安全
-    device_map="cpu",            # 强制全部放在 CPU
-    trust_remote_code=True
-).language_model.model.embed_tokens.eval()
-embed_tokens.requires_grad_(False)
-tokenizer = AutoTokenizer.from_pretrained(path, trust_remote_code=True, use_fast=False)
+h, w, ph, pw = 4, 3, 2, 2               # 小例子
+H, W = h*ph, w*pw
 
-def get_text_tokens(texts):
-    return tokenizer(
-        texts,
-        return_tensors="pt",
-        padding="max_length",   # pad 到固定长度
-        truncation=True,        # 太长就截断
-        max_length=5            # 固定长度 5
-    )["input_ids"]
+# 构造按行优先的 patch 序列编号：i = 0..(h*w-1)
+idx = torch.arange(h*w)
+x = idx.view(1, h*w, 1).float()         # 形状 (b=1, h*w, c*ph*pw=1) 只为演示
 
-breakpoint()
-latents = embed_tokens(get_text_tokens(texts))
+img = rearrange(x, "b (hh ww) c -> b c hh ww", hh=h, ww=w)  # 还原到 (h,w) 网格
+# 如果再做你那步 unpatchify（带 ph/pw），把 c=ph*pw 的展开加上即可
 
-# text_decode = tokenizer.decode(tokens)
+print(img[0,0])  # 若每行是连续递增块，说明使用的是行优先
+# 你也可以把真实 cond_pred 走一遍，观察每行/每列编号或图像是否按期望对齐

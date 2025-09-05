@@ -14,7 +14,7 @@ import cv2
 from transformers import AutoTokenizer
 from pathlib import Path
 
-PROMPT = 'ancient Chinese oracle bone script carved into a cracked turtle plastron and ox scapula'
+PROMPT = 'Ancient Egyptian hieroglyphs are a pictographic writing system that blends phonetic signs, logograms, and determinatives to record language on stone, papyrus, and monuments for over three millennia.'
 path = "/data/user/txu647/.cache/InternVL3-1B"
 tokenizer = AutoTokenizer.from_pretrained(path, trust_remote_code=True, use_fast=False)
 
@@ -35,56 +35,21 @@ def resize_and_pad(img: Image.Image, N: int, fill=(255, 255, 255)):
     return bg
 
 class CustomImageDataset(Dataset):
-    def __init__(self, img_dir, font_path, img_size=128, font_scale=0.8, use_undeciphered=False, font_size=None):        
+    def __init__(self, img_dir, img_size=128, font_scale=0.8, use_undeciphered=False, font_size=None):        
         img_dir = Path(img_dir)
-        cache = img_dir / ".png_cache.txt"
-        if cache.exists():
-            samples = [Path(s) for s in cache.read_text(encoding="utf-8").splitlines() if s.strip()]
-        else:
-            samples = [p for p in img_dir.rglob("*") if p.is_file() and p.suffix.lower() == ".png"]
-            cache.write_text("\n".join(str(p) for p in samples), encoding="utf-8")
-
-        self.samples = []
-        if not use_undeciphered:
-            for sample in samples:
-                if 'undeciphered' not in str(sample):
-                    self.samples.append(sample)
-        else:
-            self.samples = samples
-
+        self.samples = [p for p in img_dir.rglob("*") if p.is_file() and p.suffix.lower() == ".jpg"]
+        self.img_size = (img_size, img_size)
         print('Dataset length:', len(self.samples))
         print('Use undeciphered data:', use_undeciphered)
         
-        # ./word_dataset/HUST-OBC/deciphered/ID_to_chinese.json
-        json_path_1 = os.path.join(img_dir, 'deciphered', 'ID_to_chinese.json')
-        with open(json_path_1, 'r', encoding='utf-8') as f:
-            json_file_1 = json.load(f)
+        json_path_1 = os.path.join(img_dir, 'mapping_ch.json')
+        with open(json_path_1, 'r', encoding='utf-8') as f:        
+            self.id2chinese = json.load(f)
 
-        json_path_2 = os.path.join(img_dir, 'GuoXueDaShi_1390', 'ID_to_chinese.json')
-        with open(json_path_2, 'r', encoding='utf-8') as f:
-            json_file_2 = json.load(f)
-        
-        self.id2chinese = {
-            'deciphered': json_file_1,
-            'GuoXueDaShi_1390': json_file_2
-        }
-        self.img_size = (img_size, img_size)
-
-        self.font_size = img_size if font_size is None else font_size
+        self.font_path = "./FangZhengKaiTiFanTi-1.ttf"  
         self.font_scale = font_scale
-
-        # download here: https://github.com/multitheftauto/unifont/releases
-        font_paths = [
-            os.path.join(font_path, "unifont-16.0.04.otf"),
-            os.path.join(font_path, "unifont-SMP-Upper-16.0.04.otf"),
-            os.path.join(font_path, "unifont_jp-16.0.04.otf"),
-        ]
-
-        self.fonts = [
-            ImageFont.truetype(font_paths[0], int(font_scale * self.font_size)),
-            ImageFont.truetype(font_paths[1], int(font_scale * self.font_size)),
-            ImageFont.truetype(font_paths[2], int(font_scale * self.font_size))
-        ]
+        self.font_size = img_size if font_size is None else font_size
+        self.font = ImageFont.truetype(self.font_path, int(font_scale * self.font_size))
 
         self.bad_indices = []
 
@@ -92,13 +57,9 @@ class CustomImageDataset(Dataset):
         return len(self.samples)
     
     def render_char(self, ch, bg="white", fg="black"):
-        img = None
-        for font in self.fonts:
-            if ImageFont.FreeTypeFont.getbbox(font, ch) is None:
-                continue
-            img = Image.new("RGB", self.img_size, bg)
-            pad = self.font_size * (1 - self.font_scale) // 2
-            ImageDraw.Draw(img).text((pad, pad), ch, font=font, fill=fg)
+        img = Image.new("RGB", self.img_size, bg)
+        pad = self.font_size * (1 - self.font_scale) // 2
+        ImageDraw.Draw(img).text((pad, pad), ch, font=self.font, fill=fg)
         return img
 
     def get_text_tokens(self, texts):
@@ -114,14 +75,9 @@ class CustomImageDataset(Dataset):
         if img_path in self.bad_indices:
             return self.get_real_img(random.randint(0, len(self.samples) - 1))
         
-        text_id = img_path.name.split('_')[1]
-        class_name = None
-        for id in self.id2chinese.keys():
-            if id in str(img_path):
-                class_name = id
-                break
-        assert class_name is not None, f"find unsupported oracle script class, img path: {img_path}" 
-        text = self.id2chinese[class_name][text_id]
+        # /data/user/txu647/code/flux-calligraphy/word_dataset/hieroglyphs_dataset/001/100 (1).jpg
+        text_id = img_path.parent.name
+        text = self.id2chinese[text_id]
         
         img = Image.open(img_path).convert('RGB')
         assert self.img_size[0] == self.img_size[1]
@@ -151,7 +107,7 @@ class CustomImageDataset(Dataset):
             return self.__getitem__(random.randint(0, len(self.samples) - 1))
 
 
-def loader_oracle(train_batch_size, num_workers, **args):
+def loader_eg(train_batch_size, num_workers, **args):
     dataset = CustomImageDataset(**args)
     return DataLoader(dataset, batch_size=train_batch_size, num_workers=num_workers, shuffle=True)
 
@@ -165,14 +121,13 @@ if __name__ == '__main__':
         condition_img = (condition_img.permute(1, 2, 0) + 1).numpy() * 127.5
         image = Image.fromarray(image.astype(np.uint8))
         condition_img = Image.fromarray(condition_img.astype(np.uint8))
-        image.save(f'test_data/oracle/img_{i}.png'); condition_img.save(f'test_data/oracle/cond_{i}.png')
+        image.save(f'test_data/eg/img_{i}.png'); condition_img.save(f'test_data/eg/cond_{i}.png')
         print(caption)
         print(texts_tokens)
         return tokenizer.decode(texts_tokens)[0]
         
     dataset = CustomImageDataset(
-        './word_dataset/HUST-OBC',
-        './unifont',
+        './word_dataset/hieroglyphs_dataset',
         img_size=128,
         )
 

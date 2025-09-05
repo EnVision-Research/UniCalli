@@ -40,7 +40,8 @@ from src.flux.sampling import denoise, get_noise, get_schedule, prepare, unpack
 from src.flux.util import (configs, load_ae, load_clip,
                        load_flow_model2, load_t5)
 from src.flux.xflux_pipeline import XFluxSampler
-from image_datasets.dataset_oracle import loader
+from image_datasets.dataset_oracle import loader_oracle
+from image_datasets.dataset_eg import loader_eg
 
 if is_wandb_available():
     import wandb
@@ -124,9 +125,9 @@ def main():
     optimizer_cls = torch.optim.AdamW
     #you can train your own layers
     for n, param in dit.named_parameters():
-        param.requires_grad = True
-        # if 'txt_attn' not in n:
-        #     param.requires_grad = False
+        # param.requires_grad = True
+        if 'txt_attn' not in n:
+            param.requires_grad = False
         # if 'attn' not in n:
         #     param.requires_grad = False
     # dit.module_embeddings.requires_grad_(True)
@@ -140,7 +141,13 @@ def main():
         eps=args.adam_epsilon,
     )
 
-    train_dataloader = loader(**args.data_config)
+    if args.dataset_type == 'eg':
+        train_dataloader = loader_eg(**args.data_config)
+    elif args.dataset_type == 'oracle':
+        train_dataloader = loader_oracle(**args.data_config)
+    else:
+        raise NotImplementedError
+    
     # Scheduler and math around the number of training steps.
     overrode_max_train_steps = False
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
@@ -182,9 +189,8 @@ def main():
                 dit_state2[k[len('module.'):]] = dit_state[k]
             
             # use (1, N, C) modulate embedding shape
-            # if dit_state2['module_embeddings'].shape != dit.module_embeddings.shape:
-            #     dit_state2['module_embeddings'] = dit_state2['module_embeddings'].repeat(
-            #         1, 1, dit.module_embeddings.shape[2])
+            if dit_state2['module_embeddings'].shape != dit.module_embeddings.shape:
+                dit_state2['module_embeddings'] = dit_state2['module_embeddings'][:, :dit.module_embeddings.shape[1]]
                 
             dit.load_state_dict(dit_state2)
             # optimizer_state = torch.load(os.path.join(args.output_dir, path, 'optimizer.bin'), map_location='cpu', weights_only=False)
@@ -304,8 +310,8 @@ def main():
                 cond_pred = rearrange(cond_pred, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h//2, w=w//2, ph=2, pw=2)
 
                 loss_img = F.mse_loss(img_pred.float(), (x_0 - x_1).float(), reduction="mean")
-                loss_cond = 0.5 * F.mse_loss(cond_pred.float(), (cond_0 - cond_latent).float(), reduction="mean")
-                loss_cond_txt = 0.5 * F.mse_loss(txt_pred.float(), (cond_txt_0 - text_latent).float(), reduction="mean")
+                loss_cond = F.mse_loss(cond_pred.float(), (cond_0 - cond_latent).float(), reduction="mean")
+                loss_cond_txt = 0.1 * F.mse_loss(txt_pred.float(), (cond_txt_0 - text_latent).float(), reduction="mean")
 
                 if mode == 'img':
                     loss = loss_img + 0.01 * loss_cond + 0.01 * loss_cond_txt
@@ -339,7 +345,7 @@ def main():
                         sampler = XFluxSampler(clip=clip, t5=t5, ae=vae, 
                                 model=dit, device=accelerator.device, intern_vlm_path=intern_path)
                         # images = []
-                        with open("test_data/oracle/cond.txt", "r", encoding="utf-8") as f:
+                        with open(f"test_data/{args.dataset_type}/cond.txt", "r", encoding="utf-8") as f:
                             text = f.read()
                         cond_text_list = text.splitlines()
 
@@ -348,7 +354,7 @@ def main():
                             idx = i
                             cond_text = cond_text_list[i]
                             print('cond_text:', cond_text)
-                            cond_image = Image.open(f'test_data/oracle/cond_{idx}.png')
+                            cond_image = Image.open(f'test_data/{args.dataset_type}/cond_{idx}.png')
                             # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
                             result, _ = sampler(prompt=prompt,
                                             width=args.sample_width,
@@ -365,7 +371,7 @@ def main():
                         for i, prompt in enumerate(args.sample_prompts):
                             # recognition
                             idx = i
-                            cond_image = Image.open(f'test_data/oracle/img_{idx}.png')
+                            cond_image = Image.open(f'test_data/{args.dataset_type}/img_{idx}.png')
                             # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
                             result, text = sampler(prompt=prompt,
                                             width=args.sample_width,
@@ -376,10 +382,11 @@ def main():
                                             required_chars=5
                                             )
                             # images.append(wandb.Image(result))
-                            try:
-                                result.save(f"{args.output_dir}/validation/{global_step}/rec_{idx}_{text[0]}.png")
-                            except:
-                                result.save(f"{args.output_dir}/validation/{global_step}/rec_{idx}.png")
+                            # try:
+                            #     result.save(f"{args.output_dir}/validation/{global_step}/rec_{idx}_{text[0]}.png")
+                            # except:
+                            result.save(f"{args.output_dir}/validation/{global_step}/rec_{idx}.png")
+                            print(text)
                         # wandb.log({f"Results, step {global_step}": images})
 
                 if global_step % args.checkpointing_steps == 0:

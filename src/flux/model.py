@@ -9,6 +9,41 @@ from .modules.layers import (DoubleStreamBlock, EmbedND, LastLayer,
                                  timestep_embedding)
 
 
+import torch
+import torch.nn as nn
+
+class TokenDecoder(nn.Module):
+    """
+    enc:      B x N x C1   DiT 的 encoder tokens
+    slots_in: B x 5 x C1   你传入的 5 个预留 token
+    return:   B x 5 x C2
+    """
+    def __init__(self, c1, c2, num_heads=8, num_layers=1):
+        super().__init__()
+        self.blocks = nn.ModuleList([
+            nn.ModuleDict({
+                "ln_q": nn.LayerNorm(c1),
+                "ln_kv": nn.LayerNorm(c1),
+                "attn": nn.MultiheadAttention(embed_dim=c1, num_heads=num_heads, batch_first=True),
+                "ffn": nn.Sequential(
+                    nn.Linear(c1, 4*c1),
+                    nn.GELU(),
+                    nn.Linear(4*c1, c1),
+                ),
+            }) for _ in range(num_layers)
+        ])
+        self.proj_out = nn.Linear(c1, c2)
+
+    def forward(self, enc, slots_in):
+        slots = slots_in
+        for blk in self.blocks:
+            q = blk["ln_q"](slots)
+            kv = blk["ln_kv"](enc)
+            attn_out, _ = blk["attn"](query=q, key=kv, value=kv)
+            slots = slots + attn_out
+            slots = slots + blk["ffn"](slots)
+        return self.proj_out(slots)
+
 @dataclass
 class FluxParams:
     in_channels: int
@@ -81,16 +116,14 @@ class Flux(nn.Module):
         self.cond_txt_in = None
         self.cond_txt_out = None
     
-    def init_module_embeddings(self, tokens_num: int, cond_txt_channel=896):
+    def init_module_embeddings(self, tokens_num: int, cond_txt_channel=896, attn_layers=2):
         self.module_embeddings = nn.Parameter(torch.zeros(1, tokens_num, self.hidden_size))
         self.cond_txt_in = nn.Linear(cond_txt_channel, self.hidden_size)
-        self.cond_txt_out = nn.Linear(self.hidden_size, cond_txt_channel)
+        self.cond_txt_out = TokenDecoder(self.hidden_size, cond_txt_channel, num_layers=attn_layers)
         self.learnable_txt_ids = nn.Parameter(torch.zeros(1, 512, 3))
 
-        nn.init.zeros_(self.cond_txt_in.weight)
+        nn.init.xavier_uniform_(self.cond_txt_in.weight)
         nn.init.zeros_(self.cond_txt_in.bias)
-        nn.init.zeros_(self.cond_txt_out.weight)
-        nn.init.zeros_(self.cond_txt_out.bias)
         
     def _set_gradient_checkpointing(self, module, value=False):
         if hasattr(module, "gradient_checkpointing"):
@@ -274,8 +307,10 @@ class Flux(nn.Module):
 
         if cond_txt_latent is not None:
             cond_txt = img[:, txt.shape[1]-cond_txt_length:txt.shape[1], ...]
-            cond_txt = self.cond_txt_out(cond_txt)
-
         img = img[:, txt.shape[1]:, ...]
+        if cond_txt_latent is not None:
+            cond_img_latent = img.chunk(2, dim=1)[1]
+            cond_txt = self.cond_txt_out(cond_img_latent, cond_txt)
+
         img = self.final_layer(img, vec, vec2)  # (N, T, patch_size ** 2 * out_channels)
         return img, cond_txt

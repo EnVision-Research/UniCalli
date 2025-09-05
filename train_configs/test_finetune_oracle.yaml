@@ -6,6 +6,7 @@ data_config:
   img_dir: ./word_dataset/HUST-OBC
   font_path: ./unifont
   use_undeciphered: false
+dataset_type: "oracle"
 report_to: tensorboard
 train_batch_size: 2
 output_dir: ckpts/oracle_v3.1/
