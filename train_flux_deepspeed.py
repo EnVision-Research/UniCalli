@@ -119,14 +119,15 @@ def main():
         trust_remote_code=True
     ).language_model.model.embed_tokens.eval()
     embed_tokens.requires_grad_(False)
-    emb_token_weights = embed_tokens.weight.clone().detach()  #  detach: requires_grad False
 
     optimizer_cls = torch.optim.AdamW
     #you can train your own layers
     for n, param in dit.named_parameters():
         param.requires_grad = True
-        # if 'txt_attn' not in n:
-        #     param.requires_grad = False
+        if args.debug_mode:
+            print("debug mode!!!!")
+            if 'txt_attn' not in n:
+                param.requires_grad = False
         # if 'attn' not in n:
         #     param.requires_grad = False
         # else:
@@ -264,12 +265,14 @@ def main():
                     #     img=torch.cat((x_1, cond_latent), dim=3), prompt=prompts)
                     inp = prepare(t5=t5, clip=clip, img=x_1, prompt=prompts)
 
-                bs = img.shape[0]
-                mode = random.choice(['cond', 'img'])
+                # mode = random.choice(['cond', 'img'])
+                mode = 'img' if step % 2 == 0 else 'cond'  # 交替训练
                 # mode = 'img'
                 if mode == 'img':  # pred cond, by given pure img
                     t = torch.sigmoid(torch.randn((1,), device=accelerator.device))
                     t_cond = torch.zeros_like(t).to(accelerator.device)
+                    if random.random() < 0.02:   # aug, uncond generation, tianshuo
+                        t_cond += 0.98
                 else:
                     t_cond = torch.sigmoid(torch.randn((1,), device=accelerator.device))
                     t = torch.zeros_like(t_cond).to(accelerator.device)
@@ -310,13 +313,13 @@ def main():
                 cond_pred = rearrange(cond_pred, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h//2, w=w//2, ph=2, pw=2)
 
                 loss_img = F.mse_loss(img_pred.float(), (x_0 - x_1).float(), reduction="mean")
-                loss_cond = 0.5 * F.mse_loss(cond_pred.float(), (cond_0 - cond_latent).float(), reduction="mean")
-                loss_cond_txt = 0.05 * F.mse_loss(txt_pred.float(), (cond_txt_0 - text_latent).float(), reduction="mean")
+                loss_cond = F.mse_loss(cond_pred.float(), (cond_0 - cond_latent).float(), reduction="mean")
+                loss_cond_txt = F.mse_loss(txt_pred.float(), (cond_txt_0 - text_latent).float(), reduction="mean")
 
                 if mode == 'img':
-                    loss = loss_img + 0.01 * loss_cond + 0.01 * loss_cond_txt
+                    loss = loss_img + 0.05 * loss_cond + 0.05 * loss_cond_txt
                 else:
-                    loss = loss_cond + loss_cond_txt + 0.01 * loss_img
+                    loss = 0.5 * loss_cond + 0.5 * loss_cond_txt + 0.1 * loss_img
                 # loss = F.mse_loss(model_pred.float(), (x_0 - x_1).float(), reduction="mean")
 
                 # Gather the losses across all processes for logging (if we use distributed training).

@@ -414,14 +414,14 @@ class CustomImageDataset(Dataset):
         return img, prompt, cond_img, texts
 
     def get_syn_img(self):
-        if random.random() < 0.5:
-            bg_color = "white"
-            background_color = (255, 255, 255)  # 白色背景
-            text_color = (0, 0, 0)  # 黑色文字
-        else:
-            bg_color = "black"
-            background_color = (0, 0, 0)
-            text_color = (255, 255, 255)
+        # if random.random() < 0.5:
+        #     bg_color = "white"
+        #     background_color = (255, 255, 255)  # 白色背景
+        #     text_color = (0, 0, 0)  # 黑色文字
+        # else:
+        bg_color = "black"
+        background_color = (0, 0, 0)
+        text_color = (255, 255, 255)
 
         texts = self.get_random_text_from_txt()
         img = Image.new("RGB", self.img_size, background_color)

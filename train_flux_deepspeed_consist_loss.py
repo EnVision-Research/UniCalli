@@ -40,8 +40,10 @@ from src.flux.sampling import denoise, get_noise, get_schedule, prepare, unpack
 from src.flux.util import (configs, load_ae, load_clip,
                        load_flow_model2, load_t5)
 from src.flux.xflux_pipeline import XFluxSampler
+
 from image_datasets.dataset import loader
-# from image_datasets.dataset_oracle import oracle_loader
+from image_datasets.dataset_oracle import loader_oracle
+from image_datasets.dataset_eg import loader_eg
 
 if is_wandb_available():
     import wandb
@@ -104,8 +106,11 @@ def main():
             os.makedirs(os.path.join(args.output_dir, 'validation'), exist_ok=True)
 
     dit, vae, t5, clip = get_models(name=args.model_name, device=accelerator.device, offload=False, is_schnell=is_schnell)
+    if args.dataset_type == 'eg' or args.dataset_type == 'oracle':
+        dit.init_module_embeddings(tokens_num=64)
+    else:
+        dit.init_module_embeddings(320)
 
-    dit.init_module_embeddings(320)
     vae.requires_grad_(False)
     t5.requires_grad_(False)
     clip.requires_grad_(False)
@@ -120,17 +125,24 @@ def main():
         trust_remote_code=True
     ).language_model.model.embed_tokens.eval()
     embed_tokens.requires_grad_(False)
-    emb_token_weights = embed_tokens.weight.clone().detach()  #  detach: requires_grad False
 
     optimizer_cls = torch.optim.AdamW
     #you can train your own layers
     for n, param in dit.named_parameters():
         param.requires_grad = True
-        # if 'txt_attn' not in n:
-        #     param.requires_grad = False
+        if args.debug_mode:
+            print("debug mode!!!!")
+            if 'txt_attn' not in n:
+                param.requires_grad = False
         # if 'attn' not in n:
         #     param.requires_grad = False
+        # else:
+        #     param.requires_grad = True
+            
     # dit.module_embeddings.requires_grad_(True)
+    # dit.cond_txt_in.requires_grad_(True)
+    # dit.cond_txt_out.requires_grad_(True)
+    # dit.learnable_txt_ids.requires_grad_(True)
 
     print(sum([p.numel() for p in dit.parameters() if p.requires_grad]) / 1000000, 'M parameters')
     optimizer = optimizer_cls(
@@ -141,11 +153,13 @@ def main():
         eps=args.adam_epsilon,
     )
 
-    # if hasattr(args, "is_oracle") and args.is_oracle:
-    #     print("!!!!!!!!!!!!!!!!!!is oracle!!!!!!!!!!!!!!")
-    #     train_dataloader = oracle_loader(**args.data_config)
-    # else:
-    train_dataloader = loader(**args.data_config)
+    if args.dataset_type == 'eg':
+        train_dataloader = loader_eg(**args.data_config)
+    elif args.dataset_type == 'oracle':
+        train_dataloader = loader_oracle(**args.data_config)
+    else:
+        train_dataloader = loader(**args.data_config)
+    
     # Scheduler and math around the number of training steps.
     overrode_max_train_steps = False
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
@@ -186,11 +200,6 @@ def main():
             for k in dit_state.keys():
                 dit_state2[k[len('module.'):]] = dit_state[k]
             
-            # use (1, N, C) modulate embedding shape
-            # if dit_state2['module_embeddings'].shape != dit.module_embeddings.shape:
-            #     dit_state2['module_embeddings'] = dit_state2['module_embeddings'].repeat(
-            #         1, 1, dit.module_embeddings.shape[2])
-                
             dit.load_state_dict(dit_state2)
             # optimizer_state = torch.load(os.path.join(args.output_dir, path, 'optimizer.bin'), map_location='cpu', weights_only=False)
             # optimizer.load_state_dict(optimizer_state['base_optimizer_state'])
@@ -245,6 +254,7 @@ def main():
         for step, batch in enumerate(train_dataloader):
             with accelerator.accumulate(dit):
                 img, prompts, cond_image, text_token = batch
+                is_cond_empty = True if text_token == '[empty]' else False
                 text_latent = embed_tokens(text_token).to(accelerator.device)
 
                 if print_shape_flag:
@@ -263,12 +273,14 @@ def main():
                     #     img=torch.cat((x_1, cond_latent), dim=3), prompt=prompts)
                     inp = prepare(t5=t5, clip=clip, img=x_1, prompt=prompts)
 
-                bs = img.shape[0]
-                mode = random.choice(['cond', 'img'])
+                # mode = random.choice(['cond', 'img'])
+                mode = 'img' if step % 2 == 0 else 'cond'  # 交替训练
                 # mode = 'img'
                 if mode == 'img':  # pred cond, by given pure img
                     t = torch.sigmoid(torch.randn((1,), device=accelerator.device))
                     t_cond = torch.zeros_like(t).to(accelerator.device)
+                    if random.random() < 0.02 or is_cond_empty:   # aug, uncond generation, tianshuo
+                        t_cond += 0.98
                 else:
                     t_cond = torch.sigmoid(torch.randn((1,), device=accelerator.device))
                     t = torch.zeros_like(t_cond).to(accelerator.device)
@@ -309,13 +321,13 @@ def main():
                 cond_pred = rearrange(cond_pred, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h//2, w=w//2, ph=2, pw=2)
 
                 loss_img = F.mse_loss(img_pred.float(), (x_0 - x_1).float(), reduction="mean")
-                loss_cond = 0.5 * F.mse_loss(cond_pred.float(), (cond_0 - cond_latent).float(), reduction="mean")
-                loss_cond_txt = 0.5 * F.mse_loss(txt_pred.float(), (cond_txt_0 - text_latent).float(), reduction="mean")
+                loss_cond = F.mse_loss(cond_pred.float(), (cond_0 - cond_latent).float(), reduction="mean")
+                loss_cond_txt = F.mse_loss(txt_pred.float(), (cond_txt_0 - text_latent).float(), reduction="mean")
 
                 if mode == 'img':
-                    loss = loss_img + 0.01 * loss_cond + 0.01 * loss_cond_txt
+                    loss = loss_img + 0.05 * loss_cond + 0.05 * loss_cond_txt
                 else:
-                    loss = loss_cond + loss_cond_txt + 0.01 * loss_img
+                    loss = 0.5 * loss_cond + 0.5 * loss_cond_txt + 0.1 * loss_img
 
                 # consistent loss, total reverse
                 img_pred_x1 = x_0 - img_pred
@@ -457,7 +469,10 @@ def main():
                                             required_chars=5
                                             )
                             # images.append(wandb.Image(result))
-                            result.save(f"{args.output_dir}/validation/{global_step}/rec_{idx}_{text}.png")
+                            try:
+                                result.save(f"{args.output_dir}/validation/{global_step}/rec_{idx}_{text}.png")
+                            except:
+                                result.save(f"{args.output_dir}/validation/{global_step}/rec_{idx}_bad.png")
                         # wandb.log({f"Results, step {global_step}": images})
 
                 if global_step % args.checkpointing_steps == 0:

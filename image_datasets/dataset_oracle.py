@@ -18,6 +18,17 @@ PROMPT = 'ancient Chinese oracle bone script carved into a cracked turtle plastr
 path = "/data/user/txu647/.cache/InternVL3-1B"
 tokenizer = AutoTokenizer.from_pretrained(path, trust_remote_code=True, use_fast=False)
 
+def get_text_tokens(texts):
+    return tokenizer(
+        texts,
+        return_tensors="pt",
+        padding="max_length",   # pad 到固定长度
+        max_length=5
+    )["input_ids"]
+
+EMPTY_SIGNAL = '[empty]'
+EMPTY_TOKEN = get_text_tokens(EMPTY_SIGNAL)
+
 def convert_to_pinyin(text, with_tone=False):
     return ' '.join([item[0] if isinstance(item, list) else item for item in lazy_pinyin(text)])
 
@@ -65,6 +76,7 @@ class CustomImageDataset(Dataset):
             json_file_2 = json.load(f)
         
         self.id2chinese = {
+            'undeciphered': EMPTY_SIGNAL,
             'deciphered': json_file_1,
             'GuoXueDaShi_1390': json_file_2
         }
@@ -92,6 +104,9 @@ class CustomImageDataset(Dataset):
         return len(self.samples)
     
     def render_char(self, ch, bg="white", fg="black"):
+        if ch == EMPTY_SIGNAL:
+            return Image.new("RGB", self.img_size, bg)
+        
         img = None
         for font in self.fonts:
             if ImageFont.FreeTypeFont.getbbox(font, ch) is None:
@@ -101,16 +116,9 @@ class CustomImageDataset(Dataset):
             ImageDraw.Draw(img).text((pad, pad), ch, font=font, fill=fg)
         return img
 
-    def get_text_tokens(self, texts):
-        return tokenizer(
-            texts,
-            return_tensors="pt",
-            padding="max_length",   # pad 到固定长度
-            max_length=5
-        )["input_ids"]
-
     def get_real_img(self, idx):        
         img_path = self.samples[idx]
+
         if img_path in self.bad_indices:
             return self.get_real_img(random.randint(0, len(self.samples) - 1))
         
@@ -121,8 +129,12 @@ class CustomImageDataset(Dataset):
                 class_name = id
                 break
         assert class_name is not None, f"find unsupported oracle script class, img path: {img_path}" 
-        text = self.id2chinese[class_name][text_id]
-        
+
+        if self.id2chinese[class_name] == EMPTY_SIGNAL:
+            text = EMPTY_SIGNAL
+        else:
+            text = self.id2chinese[class_name][text_id]
+
         img = Image.open(img_path).convert('RGB')
         assert self.img_size[0] == self.img_size[1]
         img = resize_and_pad(img, self.img_size[0])
@@ -142,7 +154,7 @@ class CustomImageDataset(Dataset):
     def __getitem__(self, idx):
         try:
             img, prompt, cond_img, text = self.get_real_img(idx)
-            text_token = self.get_text_tokens(text).squeeze(0)
+            text_token = get_text_tokens(text).squeeze(0)
             return img, prompt, cond_img, text_token
         
         except Exception as e:
@@ -165,18 +177,20 @@ if __name__ == '__main__':
         condition_img = (condition_img.permute(1, 2, 0) + 1).numpy() * 127.5
         image = Image.fromarray(image.astype(np.uint8))
         condition_img = Image.fromarray(condition_img.astype(np.uint8))
-        image.save(f'test_data/oracle/img_{i}.png'); condition_img.save(f'test_data/oracle/cond_{i}.png')
+        image.save(f'test_data/debug/img_{i}.png'); condition_img.save(f'test_data/debug/cond_{i}.png')
         print(caption)
         print(texts_tokens)
+        if texts_tokens == EMPTY_SIGNAL:
+            return EMPTY_SIGNAL
         return tokenizer.decode(texts_tokens)[0]
         
     dataset = CustomImageDataset(
         './word_dataset/HUST-OBC',
         './unifont',
         img_size=128,
+        use_undeciphered=True
         )
 
-    
     # for i in range(len(dataset)):
     cond_txt = []
     for i in range(8):

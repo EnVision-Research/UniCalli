@@ -40,7 +40,7 @@ from src.flux.sampling import denoise, get_noise, get_schedule, prepare, unpack
 from src.flux.util import (configs, load_ae, load_clip,
                        load_flow_model2, load_t5)
 from src.flux.xflux_pipeline import XFluxSampler
-from image_datasets.dataset_oracle import loader_oracle
+from image_datasets.dataset_oracle import loader_oracle, EMPTY_TOKEN
 from image_datasets.dataset_eg import loader_eg
 
 if is_wandb_available():
@@ -120,17 +120,24 @@ def main():
         trust_remote_code=True
     ).language_model.model.embed_tokens.eval()
     embed_tokens.requires_grad_(False)
-    # emb_token_weights = embed_tokens.weight.clone().detach()  #  detach: requires_grad False
 
     optimizer_cls = torch.optim.AdamW
     #you can train your own layers
     for n, param in dit.named_parameters():
-        # param.requires_grad = True
-        if 'txt_attn' not in n:
-            param.requires_grad = False
+        param.requires_grad = True
+        if args.debug_mode:
+            print("debug mode!!!!")
+            if 'txt_attn' not in n:
+                param.requires_grad = False
         # if 'attn' not in n:
         #     param.requires_grad = False
+        # else:
+        #     param.requires_grad = True
+            
     # dit.module_embeddings.requires_grad_(True)
+    # dit.cond_txt_in.requires_grad_(True)
+    # dit.cond_txt_out.requires_grad_(True)
+    # dit.learnable_txt_ids.requires_grad_(True)
 
     print(sum([p.numel() for p in dit.parameters() if p.requires_grad]) / 1000000, 'M parameters')
     optimizer = optimizer_cls(
@@ -188,10 +195,6 @@ def main():
             for k in dit_state.keys():
                 dit_state2[k[len('module.'):]] = dit_state[k]
             
-            # use (1, N, C) modulate embedding shape
-            if dit_state2['module_embeddings'].shape != dit.module_embeddings.shape:
-                dit_state2['module_embeddings'] = dit_state2['module_embeddings'][:, :dit.module_embeddings.shape[1]]
-                
             dit.load_state_dict(dit_state2)
             # optimizer_state = torch.load(os.path.join(args.output_dir, path, 'optimizer.bin'), map_location='cpu', weights_only=False)
             # optimizer.load_state_dict(optimizer_state['base_optimizer_state'])
@@ -246,8 +249,13 @@ def main():
         for step, batch in enumerate(train_dataloader):
             with accelerator.accumulate(dit):
                 img, prompts, cond_image, text_token = batch
-                text_latent = embed_tokens(text_token).to(accelerator.device)
+                is_cond_empty = False
+                
+                if args.dataset_type == 'oracle' and (text_token == EMPTY_TOKEN).all().item():
+                    is_cond_empty = True
 
+                text_latent = embed_tokens(text_token).to(accelerator.device)
+                    
                 if print_shape_flag:
                     print_shape_flag = False
                     print(f"img shape: {img.shape}")
@@ -264,12 +272,14 @@ def main():
                     #     img=torch.cat((x_1, cond_latent), dim=3), prompt=prompts)
                     inp = prepare(t5=t5, clip=clip, img=x_1, prompt=prompts)
 
-                bs = img.shape[0]
-                mode = random.choice(['cond', 'img'])
+                # mode = random.choice(['cond', 'img'])
+                mode = 'img' if step % 2 == 0 else 'cond'  # 交替训练
                 # mode = 'img'
                 if mode == 'img':  # pred cond, by given pure img
                     t = torch.sigmoid(torch.randn((1,), device=accelerator.device))
                     t_cond = torch.zeros_like(t).to(accelerator.device)
+                    if random.random() < 0.02 or is_cond_empty:   # aug, uncond generation, tianshuo
+                        t_cond += 0.98
                 else:
                     t_cond = torch.sigmoid(torch.randn((1,), device=accelerator.device))
                     t = torch.zeros_like(t_cond).to(accelerator.device)
@@ -290,8 +300,6 @@ def main():
                 x_t = torch.cat((x_t, cond_t), dim=1)
                 # b, c, h, w = x_t.shape
                 # x_t = rearrange(x_t, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
-
-                bsz = x_1.shape[0]
                 guidance_vec = torch.full((x_t.shape[0],), 4, device=x_t.device, dtype=x_t.dtype)
 
                 # Predict the noise residual and compute loss
@@ -311,12 +319,15 @@ def main():
 
                 loss_img = F.mse_loss(img_pred.float(), (x_0 - x_1).float(), reduction="mean")
                 loss_cond = F.mse_loss(cond_pred.float(), (cond_0 - cond_latent).float(), reduction="mean")
-                loss_cond_txt = 0.1 * F.mse_loss(txt_pred.float(), (cond_txt_0 - text_latent).float(), reduction="mean")
+                loss_cond_txt = F.mse_loss(txt_pred.float(), (cond_txt_0 - text_latent).float(), reduction="mean")
 
                 if mode == 'img':
-                    loss = loss_img + 0.01 * loss_cond + 0.01 * loss_cond_txt
+                    if is_cond_empty:
+                        loss = loss_img
+                    else:
+                        loss = loss_img + 0.05 * loss_cond + 0.05 * loss_cond_txt
                 else:
-                    loss = loss_cond + loss_cond_txt + 0.01 * loss_img
+                    loss = 0.5 * loss_cond + 0.5 * loss_cond_txt + 0.1 * loss_img
                 # loss = F.mse_loss(model_pred.float(), (x_0 - x_1).float(), reduction="mean")
 
                 # Gather the losses across all processes for logging (if we use distributed training).
@@ -369,6 +380,8 @@ def main():
                             result.save(f"{args.output_dir}/validation/{global_step}/gen_{idx}.png")
 
                         for i, prompt in enumerate(args.sample_prompts):
+                            cond_text = cond_text_list[i]
+                            print('cond_text:', cond_text)
                             # recognition
                             idx = i
                             cond_image = Image.open(f'test_data/{args.dataset_type}/img_{idx}.png')

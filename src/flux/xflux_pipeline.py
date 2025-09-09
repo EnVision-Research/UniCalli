@@ -374,6 +374,8 @@ class XFluxPipeline:
                     neg_ip_scale=neg_ip_scale,
                     is_generation=is_generation,
                     embed_token_weight=self.embed_tokens.weight.detach(),
+                    temperature=0.8,  # 可调节的温度参数
+                    top_k=5,  # top-k采样参数
                 )
 
             if self.offload:
@@ -387,14 +389,13 @@ class XFluxPipeline:
         x1 = rearrange(x1[-1], "c h w -> h w c")
         output_img = Image.fromarray((127.5 * (x1 + 1.0)).cpu().byte().numpy())
 
-        B, N, k = text_token.shape
+        # 确保text_token是正确的token ID
+        B, N = text_token.shape
         assert B == 1
-        ids_flat = text_token.squeeze(0).reshape(-1).tolist()             # [N*k]
-        seqs = [[i] for i in ids_flat]                                  # batch_decode 需要 list[list[int]]
-        decoded_flat = self.tokenizer.batch_decode(
-            seqs, skip_special_tokens=True, clean_up_tokenization_spaces=False
-        )                                                               # 长度 N*k
-        text = [decoded_flat[i:i+k] for i in range(0, len(decoded_flat), k)]
+        
+        # 添加调试信息
+        token_ids = text_token.squeeze(0).tolist()
+        text = self.tokenizer.decode(token_ids, skip_special_tokens=True)
         
         return output_img, text
 
