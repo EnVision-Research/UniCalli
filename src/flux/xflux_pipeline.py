@@ -380,7 +380,7 @@ class XFluxPipeline:
                 self.ae.decoder.to(x.device)
             x = unpack(x.float(), height, width)
             
-            recognized_text = []
+            recognized_text = None
             if not is_generation:  # recognition mode
                 assert self.ref_latent is not None
                 # x shape: [b, c, H, W]
@@ -403,17 +403,16 @@ class XFluxPipeline:
                     ab = chunks_flat @ ref_flat.t()                              # [num_chars, N]
                     dists = a2 + b2 - 2 * ab
                     nn_indices = dists.argmin(dim=1)                            # [num_chars]
-                    
+                    recognized_text = []
                     for idx_char in range(num_chars):
-                        unicode_key = self.ref_latent['keys'][nn_indices[idx_char]].split('.')[0]
+                        unicode_code = self.ref_latent['keys'][nn_indices[idx_char]].split('.')[0]
                         try:
                             char = chr(int(unicode_code[2:], 16))  # 移除'U+'前缀并转换为字符
                             recognized_text.append(char)
                         except ValueError:
                             print(unicode_code)
+                    recognized_text = ''.join(recognized_text)
 
-                    return ''.join(recognized_text)
-                               
             x = self.ae.decode(x)
             self.offload_model_to_cpu(self.ae.decoder)
 

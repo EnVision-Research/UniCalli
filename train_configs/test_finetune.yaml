@@ -30,7 +30,7 @@ tracker_project_name: finetune_test
 resume_from_checkpoint: latest
 gradient_accumulation_steps: 1
 disable_sampling: false
-sample_every: 1 # sample every this many steps
+sample_every: 10000 # sample every this many steps
 sample_width: 128
 sample_height: 640
 sample_steps: 25
