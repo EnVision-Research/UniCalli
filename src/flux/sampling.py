@@ -121,13 +121,8 @@ def denoise(
     ip_scale: Tensor | float = 1.0,
     neg_ip_scale: Tensor | float = 1.0,
     is_generation: bool = True,
-    embed_token_weight: Tensor=None,
-    # 新增采样参数
-    temperature: float = 0.8,
-    top_k: int = 5,
 ):
     i = 0
-    embed_token_weight = embed_token_weight.to(img.device, img.dtype)
     assert cond_txt_latent is not None
     # this is ignored for schnell
     guidance_vec = torch.full((img.shape[0],), guidance, device=img.device, dtype=img.dtype)
@@ -149,7 +144,7 @@ def denoise(
                 t1 = t_0_vec
                 t2 = t_vec
 
-        pred, text_pred = model(
+        pred = model(
             img=img,
             img_ids=img_ids,
             txt=txt,
@@ -164,7 +159,7 @@ def denoise(
         )
 
         if i >= timestep_to_start_cfg:
-            neg_pred, _ = model(
+            neg_pred = model(
                 img=img,
                 img_ids=img_ids,
                 txt=neg_txt,
@@ -188,33 +183,9 @@ def denoise(
                 pred = pred.chunk(2, dim=1)[1]
 
         img = img + (t_prev - t_curr) * pred
-        if not is_generation: # update cond_txt_latent only in recognition mode
-            cond_txt_latent = cond_txt_latent + (t_prev - t_curr) * text_pred
         i += 1
 
-    cond_txt_latent = torch.nn.functional.normalize(cond_txt_latent, dim=-1)
-    EW = torch.nn.functional.normalize(embed_token_weight, dim=-1)
-    scores = cond_txt_latent @ EW.t()
-    
-    scores = scores / temperature
-
-    # 取 top-k
-    top_k_vals, top_k_indices = scores.topk(top_k, dim=-1)
-    top_k_probs = torch.softmax(top_k_vals, dim=-1)
-
-    # multinomial 只支持 1D/2D，因此展平成 [B*N, k] 再采样
-    B, N, K = top_k_probs.shape
-    flat_probs = top_k_probs.reshape(-1, K)                # [B*N, k]
-    flat_choice = torch.multinomial(flat_probs, 1)         # [B*N, 1]
-    choice = flat_choice.view(B, N)                        # [B, N]
-
-    # 用采样到的下标，从 top_k_indices 取出真正 token id
-    selected_tokens = torch.gather(top_k_indices, -1, choice.unsqueeze(-1)).squeeze(-1)
-    # 退化处理：若出现 NaN（极少见），改用贪心
-    if torch.isnan(top_k_probs).any():
-        selected_tokens = scores.argmax(dim=-1)
-
-    return img, selected_tokens
+    return img
 
 def denoise_controlnet(
     model: Flux,

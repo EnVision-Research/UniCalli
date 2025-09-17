@@ -12,6 +12,7 @@ data_config:
 report_to: tensorboard
 train_batch_size: 1
 output_dir: ckpts/general_v4/  # fix noise schedule
+ref_latent_path: ./ttf_chars_128_latents.pt
 max_train_steps: 1000000
 learning_rate: 1e-6
 lr_scheduler: constant
@@ -29,7 +30,7 @@ tracker_project_name: finetune_test
 resume_from_checkpoint: latest
 gradient_accumulation_steps: 1
 disable_sampling: false
-sample_every: 10000 # sample every this many steps
+sample_every: 1 # sample every this many steps
 sample_width: 128
 sample_height: 640
 sample_steps: 25

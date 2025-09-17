@@ -186,8 +186,9 @@ def main():
             dit_state = torch.load(os.path.join(args.output_dir, path, 'dit.bin'), map_location='cpu', weights_only=False)
             dit_state2 = {}
             for k in dit_state.keys():
+                if 'cond_txt_out' in k:
+                    continue
                 dit_state2[k[len('module.'):]] = dit_state[k]
-            
             # use (1, N, C) modulate embedding shape
             # if dit_state2['module_embeddings'].shape != dit.module_embeddings.shape:
             #     dit_state2['module_embeddings'] = dit_state2['module_embeddings'].repeat(
@@ -226,6 +227,8 @@ def main():
 
     timesteps = list(torch.linspace(1, 0, 1000).numpy())
     total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
+
+    ref_latent = torch.load(args.ref_latent_path, map_location='cpu')
 
     logger.info("***** Running training *****")
     logger.info(f"  Num Epochs = {args.num_train_epochs}")
@@ -298,7 +301,7 @@ def main():
                 guidance_vec = torch.full((x_t.shape[0],), 4, device=x_t.device, dtype=x_t.dtype)
 
                 # Predict the noise residual and compute loss
-                model_pred, txt_pred = dit(img=x_t.to(weight_dtype),
+                model_pred = dit(img=x_t.to(weight_dtype),
                                 img_ids=inp['img_ids'].to(weight_dtype),
                                 txt=inp['txt'].to(weight_dtype),
                                 txt_ids=inp['txt_ids'].to(weight_dtype),
@@ -314,12 +317,11 @@ def main():
 
                 loss_img = F.mse_loss(img_pred.float(), (x_0 - x_1).float(), reduction="mean")
                 loss_cond = F.mse_loss(cond_pred.float(), (cond_0 - cond_latent).float(), reduction="mean")
-                loss_cond_txt = F.mse_loss(txt_pred.float(), (cond_txt_0 - text_latent).float(), reduction="mean")
 
                 if mode == 'img':
-                    loss = loss_img + 0.05 * loss_cond + 0.05 * loss_cond_txt
+                    loss = loss_img + 0.05 * loss_cond
                 else:
-                    loss = 0.5 * loss_cond + 0.5 * loss_cond_txt + 0.1 * loss_img
+                    loss = loss_cond + 0.05 * loss_img
                 # loss = F.mse_loss(model_pred.float(), (x_0 - x_1).float(), reduction="mean")
 
                 # Gather the losses across all processes for logging (if we use distributed training).
@@ -345,7 +347,7 @@ def main():
                     os.makedirs(f"{args.output_dir}/validation/{global_step}", exist_ok=True)
                     if accelerator.is_main_process:
                         print(f"Sampling images for step {global_step}...")
-                        sampler = XFluxSampler(clip=clip, t5=t5, ae=vae, 
+                        sampler = XFluxSampler(clip=clip, t5=t5, ae=vae, ref_latent=ref_latent,
                                 model=dit, device=accelerator.device, intern_vlm_path=intern_path)
                         # images = []
                         with open("test_data/test_en_gen/cond.txt", "r", encoding="utf-8") as f:
@@ -401,13 +403,10 @@ def main():
                                             num_steps=args.sample_steps,
                                             controlnet_image=cond_image,
                                             is_generation=False,
-                                            required_chars=5
+                                            required_chars=5,
                                             )
                             # images.append(wandb.Image(result))
-                            try:
-                                result.save(f"{args.output_dir}/validation/{global_step}/rec_{idx}_{text}.png")
-                            except:
-                                result.save(f"{args.output_dir}/validation/{global_step}/rec_{idx}_bad.png")
+                            result.save(f"{args.output_dir}/validation/{global_step}/rec_{idx}_{text}.png")
                         # wandb.log({f"Results, step {global_step}": images})
 
                 if global_step % args.checkpointing_steps == 0:

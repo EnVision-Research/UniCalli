@@ -30,6 +30,7 @@ wandb/
 libs/
 test_data/
 *.ttf
+ttf_chars*
 
 share/python-wheels/
 *.egg-info/

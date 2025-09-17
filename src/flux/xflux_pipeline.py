@@ -245,7 +245,7 @@ class XFluxPipeline:
             neg_image_proj=neg_image_proj,
             ip_scale=ip_scale,
             neg_ip_scale=neg_ip_scale,
-            is_generation=is_generation
+            is_generation=is_generation,
         )
 
     @torch.inference_mode()
@@ -356,7 +356,7 @@ class XFluxPipeline:
                     neg_ip_scale=neg_ip_scale,
                 )
             else:
-                x, text_token = denoise(
+                x = denoise(
                     self.model,
                     **inp_cond,
                     timesteps=timesteps,
@@ -373,15 +373,47 @@ class XFluxPipeline:
                     ip_scale=ip_scale,
                     neg_ip_scale=neg_ip_scale,
                     is_generation=is_generation,
-                    embed_token_weight=self.embed_tokens.weight.detach(),
-                    temperature=0.8,  # 可调节的温度参数
-                    top_k=5,  # top-k采样参数
                 )
 
             if self.offload:
                 self.offload_model_to_cpu(self.model)
                 self.ae.decoder.to(x.device)
             x = unpack(x.float(), height, width)
+            
+            recognized_text = []
+            if not is_generation:  # recognition mode
+                assert self.ref_latent is not None
+                # x shape: [b, c, H, W]
+                bsz, ch, H, W = x.shape
+                ref = self.ref_latent['latents'].to(device=x.device, dtype=x.dtype)  # [N, C, h, w]
+                N, ref_c, block_h, block_w = ref.shape
+                if ch == ref_c and (H % block_h == 0) and (W == block_w):
+                    num_chars = H // block_h
+                    # Flatten refs: [N, C*h*w]
+                    ref_flat = ref.view(N, -1)
+                    # Collect and flatten chunks: [num_chars, C*h*w] (assumes bsz==1)
+                    chunks = []
+                    for idx_char in range(num_chars):
+                        chunk = x[:, :, idx_char * block_h:(idx_char + 1) * block_h, :]
+                        chunks.append(chunk.view(ch, block_h, block_w).reshape(-1))
+                    chunks_flat = torch.stack(chunks, dim=0)
+                    # Compute L2 distance and get nearest indices: [num_chars]
+                    a2 = (chunks_flat ** 2).sum(dim=1, keepdim=True)            # [num_chars, 1]
+                    b2 = (ref_flat ** 2).sum(dim=1).unsqueeze(0)                # [1, N]
+                    ab = chunks_flat @ ref_flat.t()                              # [num_chars, N]
+                    dists = a2 + b2 - 2 * ab
+                    nn_indices = dists.argmin(dim=1)                            # [num_chars]
+                    
+                    for idx_char in range(num_chars):
+                        unicode_key = self.ref_latent['keys'][nn_indices[idx_char]].split('.')[0]
+                        try:
+                            char = chr(int(unicode_code[2:], 16))  # 移除'U+'前缀并转换为字符
+                            recognized_text.append(char)
+                        except ValueError:
+                            print(unicode_code)
+
+                    return ''.join(recognized_text)
+                               
             x = self.ae.decode(x)
             self.offload_model_to_cpu(self.ae.decoder)
 
@@ -389,15 +421,7 @@ class XFluxPipeline:
         x1 = rearrange(x1[-1], "c h w -> h w c")
         output_img = Image.fromarray((127.5 * (x1 + 1.0)).cpu().byte().numpy())
 
-        # 确保text_token是正确的token ID
-        B, N = text_token.shape
-        assert B == 1
-        
-        # 添加调试信息
-        token_ids = text_token.squeeze(0).tolist()
-        text = self.tokenizer.decode(token_ids, skip_special_tokens=True)
-        
-        return output_img, text
+        return output_img, recognized_text
 
     def offload_model_to_cpu(self, *models):
         if not self.offload: return
@@ -407,7 +431,7 @@ class XFluxPipeline:
 
 
 class XFluxSampler(XFluxPipeline):
-    def __init__(self, clip, t5, ae, model, device, intern_vlm_path):
+    def __init__(self, clip, t5, ae, ref_latent, model, device, intern_vlm_path):
         self.clip = clip
         self.t5 = t5
         self.ae = ae
@@ -417,6 +441,7 @@ class XFluxSampler(XFluxPipeline):
         self.controlnet_loaded = False
         self.ip_loaded = False
         self.offload = False
+        self.ref_latent = ref_latent
 
         self.embed_tokens = AutoModel.from_pretrained(
             intern_vlm_path,

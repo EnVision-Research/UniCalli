@@ -86,17 +86,8 @@ class CustomImageDataset(Dataset):
         self.font_scale = font_scale
 
         # download here: https://github.com/multitheftauto/unifont/releases
-        font_paths = [
-            os.path.join(font_path, "unifont-16.0.04.otf"),
-            os.path.join(font_path, "unifont-SMP-Upper-16.0.04.otf"),
-            os.path.join(font_path, "unifont_jp-16.0.04.otf"),
-        ]
-
-        self.fonts = [
-            ImageFont.truetype(font_paths[0], int(font_scale * self.font_size)),
-            ImageFont.truetype(font_paths[1], int(font_scale * self.font_size)),
-            ImageFont.truetype(font_paths[2], int(font_scale * self.font_size))
-        ]
+        font_path = os.path.join(font_path, "unifont-16.0.04.otf")
+        self.fonts = [ImageFont.truetype(font_path, int(font_scale * self.font_size))]
 
         self.bad_indices = []
 
@@ -141,7 +132,7 @@ class CustomImageDataset(Dataset):
         img = torch.from_numpy((np.array(img) / 127.5) - 1)
 
         cond_img = self.render_char(text)
-        assert cond_img is not None
+        assert cond_img is not None, f"render char is None"
         cond_img = torch.from_numpy((np.array(cond_img) / 127.5) - 1)
 
         assert img.ndim == 3 and cond_img.ndim == 3, "img and cond_img should be 3D tensors"
@@ -173,15 +164,16 @@ if __name__ == '__main__':
         index = random.randint(0, len(dataset))
         # index = i
         image, caption, condition_img, texts_tokens = dataset[index]
-        image = (image.permute(1, 2, 0) + 1).numpy() * 127.5
-        condition_img = (condition_img.permute(1, 2, 0) + 1).numpy() * 127.5
-        image = Image.fromarray(image.astype(np.uint8))
-        condition_img = Image.fromarray(condition_img.astype(np.uint8))
-        image.save(f'test_data/debug/img_{i}.png'); condition_img.save(f'test_data/debug/cond_{i}.png')
-        print(caption)
-        print(texts_tokens)
+        # image = (image.permute(1, 2, 0) + 1).numpy() * 127.5
+        # condition_img = (condition_img.permute(1, 2, 0) + 1).numpy() * 127.5
+        # image = Image.fromarray(image.astype(np.uint8))
+        # condition_img = Image.fromarray(condition_img.astype(np.uint8))
+        # image.save(f'test_data/debug/img_{i}.png'); condition_img.save(f'test_data/debug/cond_{i}.png')
+        # print(caption)
+        # print(texts_tokens)
         if texts_tokens == EMPTY_SIGNAL:
             return EMPTY_SIGNAL
+        print(tokenizer.decode(texts_tokens)[0])
         return tokenizer.decode(texts_tokens)[0]
         
     dataset = CustomImageDataset(
@@ -193,7 +185,7 @@ if __name__ == '__main__':
 
     # for i in range(len(dataset)):
     cond_txt = []
-    for i in range(8):
+    for i in range(100):
         cond_txt.append(get_item(dataset, i))
         # breakpoint()
     print(cond_txt)

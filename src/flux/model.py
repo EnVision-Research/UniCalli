@@ -114,12 +114,10 @@ class Flux(nn.Module):
 
         self.module_embeddings = None
         self.cond_txt_in = None
-        self.cond_txt_out = None
     
     def init_module_embeddings(self, tokens_num: int, cond_txt_channel=896, attn_layers=2):
         self.module_embeddings = nn.Parameter(torch.zeros(1, tokens_num, self.hidden_size))
         self.cond_txt_in = nn.Linear(cond_txt_channel, self.hidden_size)
-        self.cond_txt_out = TokenDecoder(self.hidden_size, cond_txt_channel, num_layers=attn_layers)
         self.learnable_txt_ids = nn.Parameter(torch.zeros(1, 512, 3))
 
         nn.init.xavier_uniform_(self.cond_txt_in.weight)
@@ -305,12 +303,6 @@ class Flux(nn.Module):
             else:
                 img = block(img, vec=vec, vec2=vec2, pe=pe, text_length=txt.shape[1])
 
-        if cond_txt_latent is not None:
-            cond_txt = img[:, txt.shape[1]-cond_txt_length:txt.shape[1], ...]
         img = img[:, txt.shape[1]:, ...]
-        if cond_txt_latent is not None:
-            cond_img_latent = img.chunk(2, dim=1)[1]
-            cond_txt = self.cond_txt_out(cond_img_latent, cond_txt)
-
         img = self.final_layer(img, vec, vec2)  # (N, T, patch_size ** 2 * out_channels)
-        return img, cond_txt
+        return img
