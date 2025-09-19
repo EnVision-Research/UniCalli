@@ -363,7 +363,7 @@ class CustomImageDataset(Dataset):
             padding=50,
         )
 
-        if new_locs is None:
+        if new_locs is None or chirography == '隶':
             # print(f"No valid characters found in the image: {img_path}.")
             self.bad_indices.append(img_path)
             return self.get_real_img(random.randint(0, len(self.samples) - 1))
@@ -414,14 +414,14 @@ class CustomImageDataset(Dataset):
         return img, prompt, cond_img, texts
 
     def get_syn_img(self):
-        # if random.random() < 0.5:
-        #     bg_color = "white"
-        #     background_color = (255, 255, 255)  # 白色背景
-        #     text_color = (0, 0, 0)  # 黑色文字
-        # else:
-        bg_color = "black"
-        background_color = (0, 0, 0)
-        text_color = (255, 255, 255)
+        if random.random() < 0.5:
+            bg_color = "white"
+            background_color = (255, 255, 255)  # 白色背景
+            text_color = (0, 0, 0)  # 黑色文字
+        else:
+            bg_color = "black"
+            background_color = (0, 0, 0)
+            text_color = (255, 255, 255)
 
         texts = self.get_random_text_from_txt()
         img = Image.new("RGB", self.img_size, background_color)
@@ -488,16 +488,19 @@ if __name__ == '__main__':
         with open(save_path, 'w') as f:
             json.dump(error_indices, f)
 
-    def get_item(dataset, index):
-        image, caption, condition_img, texts_tokens, texts_latents = dataset[index]
+    def get_item(dataset, index, i):
+        image, caption, condition_img, texts_tokens = dataset[index]
         image = (image.permute(1, 2, 0) + 1).numpy() * 127.5
         condition_img = (condition_img.permute(1, 2, 0) + 1).numpy() * 127.5
         image = Image.fromarray(image.astype(np.uint8))
         condition_img = Image.fromarray(condition_img.astype(np.uint8))
         # image.save(f'ckpts/img_{index}.png'); condition_img.save(f'ckpts/cond_{index}.png')
-        # image.save(f'test_data/debug/img_{index}.png'); condition_img.save(f'test_data/debug/cond_{index}.png')
+        image.save(f'test_data/debug/img_{i}.png')
+        # condition_img.save(f'test_data/recognition/cond_{i}.png')
         print(caption)
-        print(texts_tokens.shape, texts_latents.shape)
+        text = tokenizer.decode(texts_tokens).split('<|')[0]
+        return caption, text
+        # print(texts_tokens.shape, texts_latents.shape)
         
     dataset = CustomImageDataset(
         './word_dataset/finalpage',
@@ -506,7 +509,7 @@ if __name__ == '__main__':
         txt_dir='./libs/text_clips',
         ttf_dir='./libs/font',
         to_english=True,
-        synth_prob=0.5,
+        synth_prob=0,
         data_aug=True,
         author_descriptions="./word_dataset/calligraphy_styles_en.json",
         font_descriptions="./word_dataset/chirography.json",
@@ -514,10 +517,14 @@ if __name__ == '__main__':
 
     # find_error_indices(dataset, 'error_indices_chars5.json')
     # breakpoint()
-    
+    cond = {}
     # for i in range(len(dataset)):
-    for i in range(8):
-        # index = random.randint(0, len(dataset))
-        get_item(dataset, i)
+    for i in range(100):
+        index = random.randint(0, len(dataset))
+        caption, text = get_item(dataset, index, i)
+        cond[i] = {'caption': caption, 'text': text}
         # breakpoint()
+    with open("test_data/recognition/cond.json", "w", encoding="utf-8") as f:
+        json.dump(cond, f, indent=4, ensure_ascii=False)
+    # breakpoint()
     

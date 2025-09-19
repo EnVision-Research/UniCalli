@@ -116,7 +116,7 @@ class Flux(nn.Module):
         self.cond_txt_in = None
     
     def init_module_embeddings(self, tokens_num: int, cond_txt_channel=896, attn_layers=2):
-        self.module_embeddings = nn.Parameter(torch.zeros(1, tokens_num, self.hidden_size))
+        self.module_embeddings = nn.Parameter(torch.zeros(1, tokens_num, 3))
         self.cond_txt_in = nn.Linear(cond_txt_channel, self.hidden_size)
         self.learnable_txt_ids = nn.Parameter(torch.zeros(1, 512, 3))
 
@@ -201,9 +201,7 @@ class Flux(nn.Module):
         # running on sequences img
         img = self.img_in(img)
         if self.module_embeddings is not None:
-            img0, img1 = torch.chunk(img, 2, dim=1)
-            img0 = img0 + self.module_embeddings
-            img = torch.cat((img0, img1), dim=1)
+            img_ids[:, img_ids.size(1)//2] += self.module_embeddings
         vec = self.time_in(timestep_embedding(timesteps, 256))
 
         if cond_txt_latent is not None:

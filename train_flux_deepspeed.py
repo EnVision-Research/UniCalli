@@ -250,6 +250,8 @@ def main():
         for step, batch in enumerate(train_dataloader):
             with accelerator.accumulate(dit):
                 img, prompts, cond_image, text_token = batch
+                # Image.fromarray(img.add(1).mul(127.5).squeeze(0).permute(1, 2, 0).cpu().numpy().astype(np.uint8)).save('img.png')
+                # breakpoint()
                 text_latent = embed_tokens(text_token).to(accelerator.device)
 
                 if print_shape_flag:
@@ -275,7 +277,7 @@ def main():
                     t = torch.sigmoid(torch.randn((1,), device=accelerator.device))
                     t_cond = torch.zeros_like(t).to(accelerator.device)
                     if random.random() < 0.02:   # aug, uncond generation, tianshuo
-                        t_cond += 0.98
+                        t_cond += 0.9
                 else:
                     t_cond = torch.sigmoid(torch.randn((1,), device=accelerator.device))
                     t = torch.zeros_like(t_cond).to(accelerator.device)
@@ -321,7 +323,7 @@ def main():
                 if mode == 'img':
                     loss = loss_img + 0.05 * loss_cond
                 else:
-                    loss = loss_cond + 0.05 * loss_img
+                    loss = 0.2 * loss_cond + 0.01 * loss_img  # condition need small lr
                 # loss = F.mse_loss(model_pred.float(), (x_0 - x_1).float(), reduction="mean")
 
                 # Gather the losses across all processes for logging (if we use distributed training).
