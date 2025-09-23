@@ -11,5 +11,6 @@ sentencepiece
 opencv-python
 matplotlib
 onnxruntime
+torch
 torchvision
 timm

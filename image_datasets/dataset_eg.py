@@ -113,28 +113,31 @@ def loader_eg(train_batch_size, num_workers, **args):
 
 
 if __name__ == '__main__':
-    def get_item(dataset, i):
-        index = random.randint(0, len(dataset))
-        # index = i
+    def get_item(dataset, index, i, path):
         image, caption, condition_img, texts_tokens = dataset[index]
         image = (image.permute(1, 2, 0) + 1).numpy() * 127.5
         condition_img = (condition_img.permute(1, 2, 0) + 1).numpy() * 127.5
         image = Image.fromarray(image.astype(np.uint8))
         condition_img = Image.fromarray(condition_img.astype(np.uint8))
-        image.save(f'test_data/eg/img_{i}.png'); condition_img.save(f'test_data/eg/cond_{i}.png')
+        condition_img.save(path+f'cond_{i}.png')
+        image.save(path+f'img_{i}.png')
         print(caption)
-        print(texts_tokens)
-        return tokenizer.decode(texts_tokens)[0]
+        text = tokenizer.decode(texts_tokens).split('<|')[0]
+        return caption, text
         
     dataset = CustomImageDataset(
         './word_dataset/hieroglyphs_dataset',
         img_size=128,
         )
-
     
-    # for i in range(len(dataset)):
-    cond_txt = []
-    for i in range(8):
-        cond_txt.append(get_item(dataset, i))
+    cond = {}
+    path = "test_data/eg_100/"
+    os.mkdir(path)
+    for i in range(100):
+        index = random.randint(0, len(dataset))
+        # index = i
+        caption, text = get_item(dataset, index, i, path)
+        cond[i] = {'caption': caption, 'text': text}
         # breakpoint()
-    print(cond_txt)
+    with open(path+"cond.json", "w", encoding="utf-8") as f:
+        json.dump(cond, f, indent=4, ensure_ascii=False)

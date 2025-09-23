@@ -17,11 +17,11 @@ font_scale = 0.8
 font_path = "./FangZhengKaiTiFanTi-1.ttf"
 font = ImageFont.truetype(font_path, int(font_scale * img_size))
 img = get_cond_data(
-    "生日快乐喵",
+    "姓名李光磊",
     img_size,
     font,
     img_size,
     font_scale
 )
 
-img.save("/data/user/txu647/code/flux-calligraphy/test_data/c.png")
+img.save("/data/user/txu647/code/flux-calligraphy/test_data/name/1.png")

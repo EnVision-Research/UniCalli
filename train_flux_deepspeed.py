@@ -352,63 +352,93 @@ def main():
                         sampler = XFluxSampler(clip=clip, t5=t5, ae=vae, ref_latent=ref_latent,
                                 model=dit, device=accelerator.device, intern_vlm_path=intern_path)
                         # images = []
-                        with open("test_data/test_en_gen/cond.txt", "r", encoding="utf-8") as f:
+                        with open("test_data/name/cond.txt", "r", encoding="utf-8") as f:
                             text = f.read()
                         cond_text_list = text.splitlines()
 
-                        for i, prompt in enumerate(args.sample_prompts[:8]):
+                        for i, prompt in enumerate(args.sample_prompts):
                             print(prompt)
-                            # generation
-                            idx = i
-                            cond_text = cond_text_list[i]
-                            cond_image = Image.open(f'test_data/test_en_gen/cond_{idx}.png')
-                            # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
-                            result, _ = sampler(prompt=prompt,
-                                            width=args.sample_width,
-                                            height=args.sample_height,
-                                            num_steps=args.sample_steps,
-                                            controlnet_image=cond_image,
-                                            is_generation=True,
-                                            cond_text=cond_text,
-                                            required_chars=5
-                                            )
-                            # images.append(wandb.Image(result))
-                            result.save(f"{args.output_dir}/validation/{global_step}/gen_{idx}.png")
+                            font = prompt.split('font: ')[1].split(',')[0]
+                            if "author" in prompt:
+                                calligrapher = prompt.split('author: ')[1].split(',')[0].replace(' ', '_')
+                            else:
+                                calligrapher = 'synthetic'
+                            for j in range(3):
+                                # generation
+                                cond_text = cond_text_list[j]
+                                cond_image = Image.open(f'test_data/name/{j}.png')
+                                # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
+                                result, _ = sampler(prompt=prompt,
+                                                width=args.sample_width,
+                                                height=args.sample_height,
+                                                num_steps=args.sample_steps,
+                                                controlnet_image=cond_image,
+                                                is_generation=True,
+                                                cond_text=cond_text,
+                                                required_chars=5
+                                                )
+                                # images.append(wandb.Image(result))
+                                result.save(f"{args.output_dir}/name/{global_step}/{cond_text}_{calligrapher}_{font}.png")
+                        
+                        # import json
 
-                        for i, prompt in enumerate(args.sample_prompts[8:]):
-                            # generation
-                            print(prompt)
-                            idx = i
-                            cond_image = Image.open(f'test_data/c.png')
-                            cond_text = "生日快乐喵"
-                            # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
-                            result, _ = sampler(prompt=prompt,
-                                            width=args.sample_width,
-                                            height=args.sample_height,
-                                            num_steps=args.sample_steps,
-                                            controlnet_image=cond_image,
-                                            is_generation=True, 
-                                            cond_text=cond_text,
-                                            required_chars=5
-                                            )
-                            # images.append(wandb.Image(result))
-                            result.save(f"{args.output_dir}/validation/{global_step}/sp_gen_{idx}_{cond_text}.png")
+                        # with open(os.path.join(args.test_data_path, "cond.json"), "r") as t:
+                        #     data = json.load(t)
+                        # for i in range(10):
+                        #     prompt = data[f'{i}']["caption"]
+                        #     cond_text = data[f'{i}']["text"]
+                        #     print(prompt)
+                        #     cond_image = Image.open(os.path.join(args.test_data_path, f'cond_{i}.png'))
+                        #     result, _ = sampler(prompt=prompt,
+                        #                     width=args.sample_width,
+                        #                     height=args.sample_height,
+                        #                     num_steps=args.sample_steps,
+                        #                     controlnet_image=cond_image,
+                        #                     is_generation=True,
+                        #                     cond_text=cond_text,
+                        #                     required_chars=5
+                        #                     )
+                        #     # images.append(wandb.Image(result))
+                        #     result.save(f"{args.output_dir}/validation/{global_step}/gen_{cond_text}.png")
 
-                        for i, prompt in enumerate(args.sample_prompts[:8]):
-                            # generation
-                            idx = i
-                            cond_image = Image.open(f'test_data/test_en_rec/img_{idx}.png')
-                            # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
-                            result, text = sampler(prompt=prompt,
-                                            width=args.sample_width,
-                                            height=args.sample_height,
-                                            num_steps=args.sample_steps,
-                                            controlnet_image=cond_image,
-                                            is_generation=False,
-                                            required_chars=5,
-                                            )
-                            # images.append(wandb.Image(result))
-                            result.save(f"{args.output_dir}/validation/{global_step}/rec_{idx}_{text}.png")
+                        # for i, prompt in enumerate(args.sample_prompts):
+                        #     font = prompt.split('font: ')[1].split(',')[0]
+                        #     if "author" in prompt:
+                        #         calligrapher = prompt.split('author: ')[1].split(',')[0].replace(' ', '_')
+                        #     else:
+                        #         calligrapher = 'synthetic'
+                        #     print(prompt)
+                        #     idx = i
+                        #     cond_image = Image.open(f'test_data/c.png')
+                        #     cond_text = "生日快乐喵"
+                        #     # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
+                        #     result, _ = sampler(prompt=prompt,
+                        #                     width=args.sample_width,
+                        #                     height=args.sample_height,
+                        #                     num_steps=args.sample_steps,
+                        #                     controlnet_image=cond_image,
+                        #                     is_generation=True, 
+                        #                     cond_text=cond_text,
+                        #                     required_chars=5
+                        #                     )
+                        #     # images.append(wandb.Image(result))
+                        #     result.save(f"{args.output_dir}/validation/{global_step}/{cond_text}_{font}_{calligrapher}.png")
+
+                        # for i, prompt in enumerate(args.sample_prompts[:8]):
+                        #     # generation
+                        #     idx = i
+                        #     cond_image = Image.open(f'test_data/test_en_rec/img_{idx}.png')
+                        #     # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
+                        #     result, text = sampler(prompt=prompt,
+                        #                     width=args.sample_width,
+                        #                     height=args.sample_height,
+                        #                     num_steps=args.sample_steps,
+                        #                     controlnet_image=cond_image,
+                        #                     is_generation=False,
+                        #                     required_chars=5,
+                        #                     )
+                        #     # images.append(wandb.Image(result))
+                        #     result.save(f"{args.output_dir}/validation/{global_step}/rec_{idx}_{text}.png")
                         # wandb.log({f"Results, step {global_step}": images})
 
                 if global_step % args.checkpointing_steps == 0:

@@ -8,6 +8,7 @@ dataset_type: "eg"
 report_to: tensorboard
 train_batch_size: 2
 output_dir: ckpts/ancient_eg_v3.2/
+ref_latent_path: ./ttf_chars_128_latents.pt
 max_train_steps: 200000
 learning_rate: 5e-6
 lr_scheduler: constant
@@ -22,6 +23,7 @@ mixed_precision: "bf16"
 checkpointing_steps: 10000
 checkpoints_total_limit: 10
 tracker_project_name: eg
+test_data_path: test_data/eg_100
 resume_from_checkpoint: latest
 gradient_accumulation_steps: 1
 disable_sampling: false

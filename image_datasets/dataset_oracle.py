@@ -85,8 +85,7 @@ class CustomImageDataset(Dataset):
         self.font_size = img_size if font_size is None else font_size
         self.font_scale = font_scale
 
-        # download here: https://github.com/multitheftauto/unifont/releases
-        font_path = os.path.join(font_path, "unifont-16.0.04.otf")
+        font_path = os.path.join(font_path, "SourceHanSansSC-Normal.otf")
         self.fonts = [ImageFont.truetype(font_path, int(font_scale * self.font_size))]
 
         self.bad_indices = []
@@ -94,17 +93,51 @@ class CustomImageDataset(Dataset):
     def __len__(self):
         return len(self.samples)
     
+    # def render_char(self, ch, bg="white", fg="black"):
+    #     if ch == EMPTY_SIGNAL:
+    #         return Image.new("RGB", self.img_size, bg)
+        
+    #     img = None
+    #     for font in self.fonts:
+    #         if ImageFont.FreeTypeFont.getbbox(font, ch) is None:
+    #             continue
+    #         img = Image.new("RGB", self.img_size, bg)
+    #         pad = self.font_size * (1 - self.font_scale) // 2
+    #         ImageDraw.Draw(img).text((pad, pad), ch, font=font, fill=fg)
+    #     return img
     def render_char(self, ch, bg="white", fg="black"):
         if ch == EMPTY_SIGNAL:
-            return Image.new("RGB", self.img_size, bg)
-        
+            size = (self.img_size, self.img_size) if isinstance(self.img_size, int) else self.img_size
+            return Image.new("RGB", size, bg)
+
         img = None
+        size = (self.img_size, self.img_size) if isinstance(self.img_size, int) else self.img_size
+        W, H = size
+
         for font in self.fonts:
+            # 如果没有该字形就跳过（保持你原有判定）
             if ImageFont.FreeTypeFont.getbbox(font, ch) is None:
                 continue
-            img = Image.new("RGB", self.img_size, bg)
-            pad = self.font_size * (1 - self.font_scale) // 2
-            ImageDraw.Draw(img).text((pad, pad), ch, font=font, fill=fg)
+
+            img = Image.new("RGB", size, bg)
+            draw = ImageDraw.Draw(img)
+
+            # —— 核心新增：在原点测量文本包围盒（包含负的 top/left，反映基线偏移）
+            l, t, r, b = draw.textbbox((0, 0), ch, font=font, anchor="lt")
+            w, h = r - l, b - t
+
+            # —— 根据 font_scale 留出内边距
+            pad = int(self.font_size * (1.0 - self.font_scale) / 2.0)
+            inner_w = max(0, W - 2 * pad)
+            inner_h = max(0, H - 2 * pad)
+
+            # —— 在“内框”里做居中，并用 -l/-t 抵消基线偏移
+            x = pad + (inner_w - w) // 2 - l
+            y = pad + (inner_h - h) // 2 - t
+
+            # 实际绘制（anchor 与测量一致）
+            draw.text((x, y), ch, font=font, fill=fg, anchor="lt")
+
         return img
 
     def get_real_img(self, idx):        
@@ -160,32 +193,33 @@ def loader_oracle(train_batch_size, num_workers, **args):
 
 
 if __name__ == '__main__':
-    def get_item(dataset, i):
-        index = random.randint(0, len(dataset))
-        # index = i
+    def get_item(dataset, index, i, path):
         image, caption, condition_img, texts_tokens = dataset[index]
-        # image = (image.permute(1, 2, 0) + 1).numpy() * 127.5
-        # condition_img = (condition_img.permute(1, 2, 0) + 1).numpy() * 127.5
-        # image = Image.fromarray(image.astype(np.uint8))
-        # condition_img = Image.fromarray(condition_img.astype(np.uint8))
-        # image.save(f'test_data/debug/img_{i}.png'); condition_img.save(f'test_data/debug/cond_{i}.png')
-        # print(caption)
-        # print(texts_tokens)
-        if texts_tokens == EMPTY_SIGNAL:
-            return EMPTY_SIGNAL
-        print(tokenizer.decode(texts_tokens)[0])
-        return tokenizer.decode(texts_tokens)[0]
+        image = (image.permute(1, 2, 0) + 1).numpy() * 127.5
+        condition_img = (condition_img.permute(1, 2, 0) + 1).numpy() * 127.5
+        image = Image.fromarray(image.astype(np.uint8))
+        condition_img = Image.fromarray(condition_img.astype(np.uint8))
+        condition_img.save(path+f'cond_{i}.png')
+        image.save(path+f'img_{i}.png')
+        print(caption)
+        text = tokenizer.decode(texts_tokens).split('<|')[0]
+        return caption, text
         
     dataset = CustomImageDataset(
         './word_dataset/HUST-OBC',
-        './unifont',
+        './sourcehan',
         img_size=128,
-        use_undeciphered=True
+        use_undeciphered=False
         )
 
-    # for i in range(len(dataset)):
-    cond_txt = []
-    for i in range(100):
-        cond_txt.append(get_item(dataset, i))
+    cond = {}
+    path = "test_data/oracle/"
+    os.mkdir(path)
+    for i in range(8):
+        index = random.randint(0, len(dataset))
+        # index = i
+        caption, text = get_item(dataset, index, i, path)
+        cond[i] = {'caption': caption, 'text': text}
         # breakpoint()
-    print(cond_txt)
+    with open(path+"cond.json", "w", encoding="utf-8") as f:
+        json.dump(cond, f, indent=4, ensure_ascii=False)

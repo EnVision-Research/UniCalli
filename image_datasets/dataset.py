@@ -362,7 +362,10 @@ class CustomImageDataset(Dataset):
             col_threshold=50,
             padding=50,
         )
-
+        # if "王羲之" not in author:
+        #     if chirography != "草":
+        #         return self.get_real_img(random.randint(0, len(self.samples) - 1))
+        
         if new_locs is None or chirography == '隶':
             # print(f"No valid characters found in the image: {img_path}.")
             self.bad_indices.append(img_path)
@@ -488,14 +491,15 @@ if __name__ == '__main__':
         with open(save_path, 'w') as f:
             json.dump(error_indices, f)
 
-    def get_item(dataset, index, i):
+    def get_item(dataset, index, i, path):
         image, caption, condition_img, texts_tokens = dataset[index]
         image = (image.permute(1, 2, 0) + 1).numpy() * 127.5
         condition_img = (condition_img.permute(1, 2, 0) + 1).numpy() * 127.5
         image = Image.fromarray(image.astype(np.uint8))
         condition_img = Image.fromarray(condition_img.astype(np.uint8))
-        # image.save(f'ckpts/img_{index}.png'); condition_img.save(f'ckpts/cond_{index}.png')
-        image.save(f'test_data/debug/img_{i}.png')
+
+        condition_img.save(path+f'cond_{i}.png')
+        image.save(path+f'img_{i}.png')
         # condition_img.save(f'test_data/recognition/cond_{i}.png')
         print(caption)
         text = tokenizer.decode(texts_tokens).split('<|')[0]
@@ -518,13 +522,16 @@ if __name__ == '__main__':
     # find_error_indices(dataset, 'error_indices_chars5.json')
     # breakpoint()
     cond = {}
+    path = "test_data/debug_wxz_cao/"
+    os.mkdir(path)
     # for i in range(len(dataset)):
-    for i in range(100):
+    for i in range(10):
         index = random.randint(0, len(dataset))
-        caption, text = get_item(dataset, index, i)
+        # index = i
+        caption, text = get_item(dataset, index, i, path)
         cond[i] = {'caption': caption, 'text': text}
         # breakpoint()
-    with open("test_data/recognition/cond.json", "w", encoding="utf-8") as f:
+    with open(path+"cond.json", "w", encoding="utf-8") as f:
         json.dump(cond, f, indent=4, ensure_ascii=False)
     # breakpoint()
     

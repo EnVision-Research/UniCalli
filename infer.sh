@@ -10,7 +10,7 @@ export DISABLE_TELEMETRY=YES
 export WANDB_MODEL=offline
 
 ACCEL=8.yaml
-TRAIN=train_configs/test_finetune_eg.yaml
+TRAIN=train_configs/test_infer.yaml
 
 DEBUG=false
 [[ "${1:-}" == "--debug" ]] && DEBUG=true
@@ -32,4 +32,8 @@ else
 fi
 
 accelerate launch --config_file "$ACCEL" --num_processes "$NP" \
-  train_flux_deepspeed_ancient.py --config "$TMP"
+  train_flux_deepspeed.py --config "$TMP"
+# accelerate launch --config_file 8.yaml train_flux_deepspeed.py --config "train_configs/test_finetune.yaml"
+
+# --config_file 0.yaml
+# bash train.sh

@@ -193,6 +193,8 @@ def main():
             dit_state = torch.load(os.path.join(args.output_dir, path, 'dit.bin'), map_location='cpu', weights_only=False)
             dit_state2 = {}
             for k in dit_state.keys():
+                if 'cond_txt_out' in k:
+                    continue
                 dit_state2[k[len('module.'):]] = dit_state[k]
             
             dit.load_state_dict(dit_state2)
@@ -228,6 +230,8 @@ def main():
 
     timesteps = list(torch.linspace(1, 0, 1000).numpy())
     total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
+
+    ref_latent = torch.load(args.ref_latent_path, map_location='cpu')
 
     logger.info("***** Running training *****")
     logger.info(f"  Num Epochs = {args.num_train_epochs}")
@@ -300,10 +304,12 @@ def main():
                 x_t = torch.cat((x_t, cond_t), dim=1)
                 # b, c, h, w = x_t.shape
                 # x_t = rearrange(x_t, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
+
+                bsz = x_1.shape[0]
                 guidance_vec = torch.full((x_t.shape[0],), 4, device=x_t.device, dtype=x_t.dtype)
 
                 # Predict the noise residual and compute loss
-                model_pred, txt_pred = dit(img=x_t.to(weight_dtype),
+                model_pred = dit(img=x_t.to(weight_dtype),
                                 img_ids=inp['img_ids'].to(weight_dtype),
                                 txt=inp['txt'].to(weight_dtype),
                                 txt_ids=inp['txt_ids'].to(weight_dtype),
@@ -319,15 +325,11 @@ def main():
 
                 loss_img = F.mse_loss(img_pred.float(), (x_0 - x_1).float(), reduction="mean")
                 loss_cond = F.mse_loss(cond_pred.float(), (cond_0 - cond_latent).float(), reduction="mean")
-                loss_cond_txt = F.mse_loss(txt_pred.float(), (cond_txt_0 - text_latent).float(), reduction="mean")
 
                 if mode == 'img':
-                    if is_cond_empty:
-                        loss = loss_img
-                    else:
-                        loss = loss_img + 0.05 * loss_cond + 0.05 * loss_cond_txt
+                    loss = loss_img + 0.01 * loss_cond
                 else:
-                    loss = 0.5 * loss_cond + 0.5 * loss_cond_txt + 0.1 * loss_img
+                    loss = 0.5 * loss_cond + 0.01 * loss_img
                 # loss = F.mse_loss(model_pred.float(), (x_0 - x_1).float(), reduction="mean")
 
                 # Gather the losses across all processes for logging (if we use distributed training).
@@ -353,20 +355,19 @@ def main():
                     os.makedirs(f"{args.output_dir}/validation/{global_step}", exist_ok=True)
                     if accelerator.is_main_process:
                         print(f"Sampling images for step {global_step}...")
-                        sampler = XFluxSampler(clip=clip, t5=t5, ae=vae, 
+                        sampler = XFluxSampler(clip=clip, t5=t5, ae=vae, ref_latent=ref_latent,
                                 model=dit, device=accelerator.device, intern_vlm_path=intern_path)
-                        # images = []
-                        with open(f"test_data/{args.dataset_type}/cond.txt", "r", encoding="utf-8") as f:
-                            text = f.read()
-                        cond_text_list = text.splitlines()
+                        import json
 
-                        for i, prompt in enumerate(args.sample_prompts):
-                            # generation
-                            idx = i
-                            cond_text = cond_text_list[i]
+                        with open(os.path.join(args.test_data_path, "cond.json"), "r") as t:
+                            data = json.load(t)
+
+                        for i in range(len(data)):
+                            prompt = data[f'{i}']["caption"]
+                            cond_text = data[f'{i}']["text"]
+                            # generation                            
                             print('cond_text:', cond_text)
-                            cond_image = Image.open(f'test_data/{args.dataset_type}/cond_{idx}.png')
-                            # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
+                            cond_image = Image.open(os.path.join(args.test_data_path, f'cond_{i}.png'))
                             result, _ = sampler(prompt=prompt,
                                             width=args.sample_width,
                                             height=args.sample_height,
@@ -376,31 +377,24 @@ def main():
                                             cond_text=cond_text,
                                             required_chars=5
                                             )
-                            # images.append(wandb.Image(result))
-                            result.save(f"{args.output_dir}/validation/{global_step}/gen_{idx}.png")
+                            result.save(f"{args.output_dir}/validation/{global_step}/gen_{i}.png")
 
-                        for i, prompt in enumerate(args.sample_prompts):
-                            cond_text = cond_text_list[i]
-                            print('cond_text:', cond_text)
+                        for i in range(len(data)):
+                            prompt = data[f'{i}']["caption"]
                             # recognition
-                            idx = i
-                            cond_image = Image.open(f'test_data/{args.dataset_type}/img_{idx}.png')
-                            # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
+                            cond_image = Image.open(os.path.join(args.test_data_path, f'img_{i}.png'))
                             result, text = sampler(prompt=prompt,
                                             width=args.sample_width,
                                             height=args.sample_height,
                                             num_steps=args.sample_steps,
                                             controlnet_image=cond_image,
                                             is_generation=False,
-                                            required_chars=5
+                                            required_chars=5,
                                             )
-                            # images.append(wandb.Image(result))
-                            # try:
-                            #     result.save(f"{args.output_dir}/validation/{global_step}/rec_{idx}_{text[0]}.png")
-                            # except:
-                            result.save(f"{args.output_dir}/validation/{global_step}/rec_{idx}.png")
-                            print(text)
-                        # wandb.log({f"Results, step {global_step}": images})
+                            try:
+                                result.save(f"{args.output_dir}/validation/{global_step}/rec_{i}_{text}.png")
+                            except:
+                                result.save(f"{args.output_dir}/validation/{global_step}/rec_{i}.png")
 
                 if global_step % args.checkpointing_steps == 0:
                     if accelerator.is_main_process:

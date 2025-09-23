@@ -26,11 +26,14 @@ weights/
 ckpts/
 word_dataset/
 unifont/
+sourcehan/
 wandb/
 libs/
 test_data/
 *.ttf
-ttf_chars*
+cache_*
+comparisons/
+*latents.pt
 
 share/python-wheels/
 *.egg-info/
