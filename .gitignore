@@ -24,7 +24,7 @@ wheels/
 weights/
 
 ckpts/
-word_dataset/
+# word_dataset/
 unifont/
 sourcehan/
 wandb/

@@ -111,7 +111,7 @@ def main():
     dit = dit.to(torch.float32)
     dit.train()
 
-    intern_path = "/data/user/txu647/.cache/InternVL3-1B"
+    intern_path = args.data_config.tokenizer_path
     embed_tokens = AutoModel.from_pretrained(
         intern_path,
         torch_dtype=torch.float32,
@@ -128,15 +128,6 @@ def main():
             print("debug mode!!!!")
             if 'txt_attn' not in n:
                 param.requires_grad = False
-        # if 'attn' not in n:
-        #     param.requires_grad = False
-        # else:
-        #     param.requires_grad = True
-            
-    # dit.module_embeddings.requires_grad_(True)
-    # dit.cond_txt_in.requires_grad_(True)
-    # dit.cond_txt_out.requires_grad_(True)
-    # dit.learnable_txt_ids.requires_grad_(True)
 
     print(sum([p.numel() for p in dit.parameters() if p.requires_grad]) / 1000000, 'M parameters')
     optimizer = optimizer_cls(
@@ -186,18 +177,8 @@ def main():
             dit_state = torch.load(os.path.join(args.output_dir, path, 'dit.bin'), map_location='cpu', weights_only=False)
             dit_state2 = {}
             for k in dit_state.keys():
-                if 'cond_txt_out' in k:
-                    continue
                 dit_state2[k[len('module.'):]] = dit_state[k]
-            # use (1, N, C) modulate embedding shape
-            # if dit_state2['module_embeddings'].shape != dit.module_embeddings.shape:
-            #     dit_state2['module_embeddings'] = dit_state2['module_embeddings'].repeat(
-            #         1, 1, dit.module_embeddings.shape[2])
-                
             dit.load_state_dict(dit_state2)
-            # optimizer_state = torch.load(os.path.join(args.output_dir, path, 'optimizer.bin'), map_location='cpu', weights_only=False)
-            # optimizer.load_state_dict(optimizer_state['base_optimizer_state'])
-
             global_step = int(path.split("-")[1])
 
             initial_global_step = global_step
@@ -250,8 +231,6 @@ def main():
         for step, batch in enumerate(train_dataloader):
             with accelerator.accumulate(dit):
                 img, prompts, cond_image, text_token = batch
-                # Image.fromarray(img.add(1).mul(127.5).squeeze(0).permute(1, 2, 0).cpu().numpy().astype(np.uint8)).save('img.png')
-                # breakpoint()
                 text_latent = embed_tokens(text_token).to(accelerator.device)
 
                 if print_shape_flag:
@@ -266,12 +245,9 @@ def main():
                 with torch.no_grad():
                     x_1 = vae.encode(img.to(accelerator.device).to(torch.float32))
                     cond_latent = vae.encode(cond_image.to(torch.float32))
-                    # inp = prepare(t5=t5, clip=clip, 
-                    #     img=torch.cat((x_1, cond_latent), dim=3), prompt=prompts)
                     inp = prepare(t5=t5, clip=clip, img=x_1, prompt=prompts)
 
-                # mode = random.choice(['cond', 'img'])
-                mode = 'img' if step % 2 == 0 else 'cond'  # 交替训练
+                mode = 'img' if step % 2 == 0 else 'cond'
                 # mode = 'img'
                 if mode == 'img':  # pred cond, by given pure img
                     t = torch.sigmoid(torch.randn((1,), device=accelerator.device))
@@ -291,13 +267,10 @@ def main():
 
                 cond_txt_0 = torch.randn_like(text_latent).to(accelerator.device)
                 cond_txt_t = (1 - t_cond) * text_latent + t_cond * cond_txt_0
-                # x_t = torch.cat((x_t, cond_t), dim=3)
                 
                 x_t = rearrange(x_t, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
                 cond_t = rearrange(cond_t, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
                 x_t = torch.cat((x_t, cond_t), dim=1)
-                # b, c, h, w = x_t.shape
-                # x_t = rearrange(x_t, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=2, pw=2)
 
                 bsz = x_1.shape[0]
                 guidance_vec = torch.full((x_t.shape[0],), 4, device=x_t.device, dtype=x_t.dtype)
@@ -321,7 +294,7 @@ def main():
                 loss_cond = F.mse_loss(cond_pred.float(), (cond_0 - cond_latent).float(), reduction="mean")
 
                 if mode == 'img':
-                    loss = loss_img + 0.05 * loss_cond
+                    loss = loss_img + 0.01 * loss_cond
                 else:
                     loss = 0.2 * loss_cond + 0.01 * loss_img  # condition need small lr
                 # loss = F.mse_loss(model_pred.float(), (x_0 - x_1).float(), reduction="mean")
@@ -351,8 +324,8 @@ def main():
                         print(f"Sampling images for step {global_step}...")
                         sampler = XFluxSampler(clip=clip, t5=t5, ae=vae, ref_latent=ref_latent,
                                 model=dit, device=accelerator.device, intern_vlm_path=intern_path)
-                        # images = []
-                        with open("test_data/name/cond.txt", "r", encoding="utf-8") as f:
+
+                        with open("test_data/user_study/cond.txt", "r", encoding="utf-8") as f:
                             text = f.read()
                         cond_text_list = text.splitlines()
 
@@ -363,11 +336,9 @@ def main():
                                 calligrapher = prompt.split('author: ')[1].split(',')[0].replace(' ', '_')
                             else:
                                 calligrapher = 'synthetic'
-                            for j in range(3):
+                            for j, cond_text in enumerate(cond_text_list):
                                 # generation
-                                cond_text = cond_text_list[j]
-                                cond_image = Image.open(f'test_data/name/{j}.png')
-                                # cond_image = Image.open(f'test_data_rec/img_{idx}.png')
+                                cond_image = Image.open(f'test_data/user_study/{j}.png')
                                 result, _ = sampler(prompt=prompt,
                                                 width=args.sample_width,
                                                 height=args.sample_height,
@@ -377,8 +348,7 @@ def main():
                                                 cond_text=cond_text,
                                                 required_chars=5
                                                 )
-                                # images.append(wandb.Image(result))
-                                result.save(f"{args.output_dir}/name/{global_step}/{cond_text}_{calligrapher}_{font}.png")
+                                result.save(f"{args.output_dir}/validation/{global_step}/{cond_text}_{calligrapher}_{font}.png")
                         
                         # import json
 
