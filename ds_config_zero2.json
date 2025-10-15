@@ -1,0 +1,25 @@
+{
+  "train_micro_batch_size_per_gpu": 1,
+  "gradient_accumulation_steps": 1,
+  "steps_per_print": 10,
+  "zero_optimization": {
+    "stage": 3,
+    "stage3_prefetch_bucket_size": 5e8,
+    "stage3_param_persistence_threshold": 1e6,
+    "stage3_max_live_parameters": 1e9,
+    "stage3_max_reuse_distance": 1e9,
+    "offload_param": {
+      "device": "cpu",
+      "pin_memory": true
+    }
+  },
+  "fp16": {
+    "enabled": false
+  },
+  "bf16": {
+    "enabled": true
+  },
+  "zero_allow_untested_optimizer": true,
+  "wall_clock_breakdown": false,
+  "train_batch_size": 1
+}

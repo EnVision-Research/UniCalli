@@ -1,7 +1,172 @@
-v1: only generation;
-v2: general, give 2 timesteps for cond_img and img;
-v3: general, provide more detailed text description for fonts and calligraphers;
-v3.1: directly output text latent via simple linear;
-v3.1-oracle: add oracle and eg data;
-v3.2: optimize the text latent prediction by using cross attn.
-v4: general, optimize the text prediciton pipeline, using top-k; and, optimize the training tech, (prob<\p) pure noise for condition 
+# UniCalli: A Unified Diffusion Framework for Column-Level Generation and Recognition of Chinese Calligraphy
+
+[![arXiv](https://img.shields.io/badge/arXiv-2025.XXXXX-b31b1b.svg)](https://arxiv.org/abs/XXXXX)
+[![Project Page](https://img.shields.io/badge/Project-Page-green)](https://envision-research.github.io/UniCalli/)
+[![Hugging Face](https://img.shields.io/badge/HuggingFace-Model-yellow)](https://huggingface.co/TSXu/UniCalli-base)
+[![GitHub](https://img.shields.io/github/stars/EnVision-Research/UniCalli?style=social)](https://github.com/EnVision-Research/UniCalli)
+
+## Overview
+
+UniCalli is a groundbreaking unified diffusion framework that addresses the computational replication of Chinese calligraphy at the column level. Unlike existing methods that focus on isolated character generation or compromise calligraphic correctness for page-level synthesis, UniCalli integrates both recognition and generation tasks in a single model, achieving superior results in both stylistic fidelity and structural accuracy.
+
+
+### Key Features
+
+- **Unified Architecture**: First framework to unify column-level calligraphy generation and recognition
+- **Multi-Master Styles**: Supports diverse calligraphic styles, including Wang Xizhi, Yan Zhenqing, Ouyang Xun, etc.
+- **Densely Annotated Data**: Trained on large-scale calligraphy dataset with detailed annotations
+
+## Licence
+For academic research and non-commercial use only. For commercial use, please contact the authors. Additionally, we also offer a commercial-grade model with better performance and less noise.
+
+本模型仅供学术研究、非商业使用，商业使用请联系作者，另外我们还提供性能更好、噪声更少的商业级模型
+
+## TODO List
+
+- [x] **Model Release** - Base version without pred_box
+- [x] **Inference Code**
+- [ ] **Interactive Demo**
+- [ ] **Dataset Release**
+- [ ] **Training Code**
+
+## Getting Started
+
+### Installation
+
+```bash
+git clone https://github.com/username/unicalli.git
+cd unicalli
+pip install -r requirements.txt
+```
+
+### Download Model
+
+Download the pretrained model from Hugging Face:
+
+```bash
+# Using huggingface-cli
+huggingface-cli download TSXu/UniCalli-base unicalli-base_cleaned.bin --local-dir ./checkpoints
+```
+
+Or programmatically in Python:
+
+```python
+from huggingface_hub import hf_hub_download
+
+model_path = hf_hub_download(
+    repo_id="TSXu/UniCalli-base",
+    filename="unicalli-base_cleaned.bin",
+    local_dir="./checkpoints"
+)
+```
+
+### Download Other Components
+Please note that you need to download additional components to ensure the model runs properly:
+```bash
+InternVL3-1B:
+https://huggingface.co/OpenGVLab/InternVL3-1B
+
+Fangzheng TTF:
+https://www.fonts.net.cn/font-31659110985.html
+MD5: 579e8932d773f5f58ebb2c643aa89ba9
+```
+
+## Usage
+
+You can also use the API directly:
+
+```python
+from inference import CalligraphyGenerator
+
+generator = CalligraphyGenerator(
+    model_name="flux-dev",
+    device="cuda",
+    offload=False,
+    intern_vlm_path="path/to/InternVL3-1B",
+    checkpoint_path="unicalli-base_cleaned.bin",
+    font_descriptions_path='dataset/chirography.json',
+    author_descriptions_path='dataset/calligraphy_styles_en.json'
+)
+
+image, cond_img = generator.generate(
+    text="生日快乐喵",  # Must be 5 characters
+    font_style="楷",    # 楷(Regular)/草(Cursive)/行(Running)
+    author="赵佶",    # Or None to use synthetic style
+    save_path="output.png",
+    num_steps=39,
+    seed=1128293374,
+)
+```
+
+### Using DeepSpeed for Memory Optimization
+
+For large models or limited GPU memory, you can use DeepSpeed ZeRO:
+
+```python
+from inference import CalligraphyGenerator
+
+generator = CalligraphyGenerator(
+    model_name="flux-dev",
+    device="cuda",
+    offload=False,  # DeepSpeed manages memory
+    intern_vlm_path="path/to/InternVL3-1B",
+    checkpoint_path="unicalli-base_cleaned.bin",
+    font_descriptions_path='dataset/chirography.json',
+    author_descriptions_path='dataset/calligraphy_styles_en.json',
+    use_deepspeed=True,
+    deepspeed_config="ds_config_zero2.json"
+)
+
+image, cond_img = generator.generate(
+    text="生日快乐喵",  # Must be 5 characters
+    font_style="楷",    # 楷(Regular)/草(Cursive)/行(Running)
+    author="赵佶",    # Or None to use synthetic style
+    save_path="output.png",
+    num_steps=39,
+    seed=1128293374,
+)
+```
+
+### Supported Font Styles
+
+- **楷 (Regular Script / Kaishu)**: Standard, block-style characters
+- **行 (Running Script / Xingshu)**: Semi-cursive, flowing style
+- **草 (Cursive Script / Caoshu)**: Highly cursive, artistic style
+
+### Supported Calligraphy Masters
+
+The model supports various historical calligraphy masters including:
+- 王羲之 (Wang Xizhi) - "Sage of Calligraphy"
+- 颜真卿 (Yan Zhenqing) - Tang Dynasty master
+- 欧阳询 (Ouyang Xun) - One of the Four Great Masters
+- 赵佶 (Emperor Huizong) - Song Dynasty emperor and calligrapher
+- And many more...
+
+You can also use `author=None` to generate in a synthetic, averaged style.
+
+## Model Details
+
+- **Base Architecture**: FLUX diffusion model
+- **Model Size**: ~23GB
+- **Input**: Text (5 characters), font style, author style
+- **Output**: Column-level calligraphy image
+- **Training Data**: Large-scale Chinese calligraphy dataset with dense annotations
+
+
+## Citation
+
+If you find UniCalli useful in your research, please consider citing:
+
+```bibtex
+@article{xu2025unicalli,
+  title={UniCalli: A Unified Diffusion Framework for Column-Level Generation and Recognition of Chinese Calligraphy},
+  author={Xu, Tianshuo and Wang, Kai and Chen, Zhifei and Wu, Leyi and Wen, Tianshui and Chao, Fei and Chen, Ying-Cong},
+  journal={arXiv preprint arXiv:2025.XXXXX},
+  year={2025}
+}
+```
+
+## Acknowledgments
+
+This work builds upon the FLUX architecture and benefits from the rich heritage of Chinese calligraphy. We thank the calligraphy masters whose works made this research possible.
+

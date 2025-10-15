@@ -33,7 +33,8 @@ test_data/
 *.ttf
 cache_*
 comparisons/
-*latents.pt
+*.pt
+*.bin
 
 share/python-wheels/
 *.egg-info/
