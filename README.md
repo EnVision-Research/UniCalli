@@ -1,9 +1,12 @@
 # UniCalli: A Unified Diffusion Framework for Column-Level Generation and Recognition of Chinese Calligraphy
 
-[![arXiv](https://img.shields.io/badge/arXiv-2025.XXXXX-b31b1b.svg)](https://arxiv.org/abs/XXXXX)
+[![arXiv](https://img.shields.io/badge/arXiv-2025.13745-b31b1b.svg)](https://arxiv.org/abs/2510.13745)
 [![Project Page](https://img.shields.io/badge/Project-Page-green)](https://envision-research.github.io/UniCalli/)
 [![Hugging Face](https://img.shields.io/badge/HuggingFace-Model-yellow)](https://huggingface.co/TSXu/UniCalli-base)
+[![ModelScope](https://img.shields.io/badge/ModelScope-Model-blue)](https://www.modelscope.cn/models/tianshuo/UniCalli-base)
 [![GitHub](https://img.shields.io/github/stars/EnVision-Research/UniCalli?style=social)](https://github.com/EnVision-Research/UniCalli)
+
+English | [简体中文](README_zh.md)
 
 ## Overview
 
@@ -34,8 +37,8 @@ For academic research and non-commercial use only. For commercial use, please co
 ### Installation
 
 ```bash
-git clone https://github.com/username/unicalli.git
-cd unicalli
+git clone https://github.com/EnVision-Research/UniCalli.git
+cd UniCalli
 pip install -r requirements.txt
 ```
 
@@ -48,25 +51,21 @@ Download the pretrained model from Hugging Face:
 huggingface-cli download TSXu/UniCalli-base unicalli-base_cleaned.bin --local-dir ./checkpoints
 ```
 
-Or programmatically in Python:
+Or from ModelScope:
 
-```python
-from huggingface_hub import hf_hub_download
-
-model_path = hf_hub_download(
-    repo_id="TSXu/UniCalli-base",
-    filename="unicalli-base_cleaned.bin",
-    local_dir="./checkpoints"
-)
+```bash
+# Using modelscope
+pip install modelscope
+python -c "from modelscope import snapshot_download; snapshot_download('tianshuo/UniCalli-base', local_dir='./checkpoints')"
 ```
 
 ### Download Other Components
 Please note that you need to download additional components to ensure the model runs properly:
 ```bash
-InternVL3-1B:
+# InternVL3-1B:
 https://huggingface.co/OpenGVLab/InternVL3-1B
 
-Fangzheng TTF:
+# Fangzheng TTF:
 https://www.fonts.net.cn/font-31659110985.html
 MD5: 579e8932d773f5f58ebb2c643aa89ba9
 ```
@@ -161,7 +160,7 @@ If you find UniCalli useful in your research, please consider citing:
 @article{xu2025unicalli,
   title={UniCalli: A Unified Diffusion Framework for Column-Level Generation and Recognition of Chinese Calligraphy},
   author={Xu, Tianshuo and Wang, Kai and Chen, Zhifei and Wu, Leyi and Wen, Tianshui and Chao, Fei and Chen, Ying-Cong},
-  journal={arXiv preprint arXiv:2025.XXXXX},
+  journal={arXiv preprint arXiv:2025.13745},
   year={2025}
 }
 ```
