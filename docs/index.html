@@ -17,10 +17,11 @@
             line-height: 1.6;
             color: #333;
             background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
             padding: 20px;
         }
@@ -36,15 +37,33 @@
 
         header h1 {
             font-size: 2.5em;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             font-weight: 700;
         }
 
-        header p {
-            font-size: 1.2em;
-            max-width: 800px;
-            margin: 0 auto 30px;
+        .subtitle {
+            font-size: 1.3em;
+            margin-bottom: 20px;
             opacity: 0.95;
+            font-weight: 500;
+            color: #f8f9fa;
+        }
+
+        .description {
+            font-size: 1.1em;
+            max-width: 900px;
+            margin: 0 auto 20px;
+            opacity: 0.9;
+            line-height: 1.6;
+            color: #e8eaf6;
+        }
+
+        .description-zh {
+            font-size: 1.05em;
+            margin-bottom: 30px;
+            opacity: 0.85;
+            font-style: italic;
+            color: #ddd6fe;
         }
 
         .badges {
@@ -80,8 +99,8 @@
         .badge.modelscope { background: linear-gradient(135deg, #0066cc 0%, #004499 100%); }
         .badge.demo { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
 
-        /* Main Content */
-        .section {
+        /* Gallery Styles */
+        .gallery-section {
             background: white;
             margin: 40px 0;
             padding: 40px;
@@ -89,97 +108,75 @@
             box-shadow: 0 10px 30px rgba(0,0,0,0.1);
         }
 
-        .section h2 {
-            font-size: 2em;
-            margin-bottom: 20px;
+        .gallery-section h2 {
+            font-size: 2.2em;
+            margin-bottom: 30px;
             color: #667eea;
-            border-bottom: 3px solid #667eea;
-            padding-bottom: 10px;
-        }
-
-        .section h3 {
-            font-size: 1.5em;
-            margin: 30px 0 15px;
-            color: #764ba2;
-        }
-
-        .features {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 30px;
-            margin: 30px 0;
-        }
-
-        .feature-card {
-            background: linear-gradient(135deg, #f5f7fa 0%, #e4e9f2 100%);
-            padding: 30px;
-            border-radius: 10px;
             text-align: center;
-            transition: all 0.3s ease;
-            border: 2px solid transparent;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 15px;
         }
 
-        .feature-card:hover {
-            transform: translateY(-5px);
-            border-color: #667eea;
-            box-shadow: 0 10px 25px rgba(102,126,234,0.2);
+        .gallery-section h3 {
+            font-size: 1.8em;
+            margin: 40px 0 25px 0;
+            color: #555;
+            text-align: center;
         }
 
-        .feature-icon {
-            font-size: 3em;
-            margin-bottom: 15px;
-        }
-
-        .feature-card h3 {
-            font-size: 1.3em;
-            margin: 15px 0 10px;
-            color: #333;
-        }
-
-        .feature-card p {
-            color: #666;
-            line-height: 1.6;
-        }
-
-        /* Gallery */
-        .gallery {
+        .gallery-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 30px;
-            margin: 40px 0;
+            margin-bottom: 40px;
+        }
+
+        /* 文创作品 - 4张图一排 */
+        .gallery-grid.wc-grid {
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        /* 婚书 - 大尺寸横版图片，2张一排或1张一排 */
+        .gallery-grid.wedding-grid {
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 40px;
+        }
+
+        /* Wedding 1 系列 - 横版大图，更大的最小宽度 */
+        .gallery-grid.wedding-1-grid {
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 50px;
         }
 
         .gallery-item {
-            background: white;
+            text-align: center;
+            background: #f8f9fa;
             border-radius: 10px;
-            overflow: hidden;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-            transition: all 0.3s ease;
-            border: 3px solid #f0f0f0;
+            padding: 20px;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
 
         .gallery-item:hover {
-            transform: scale(1.02);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            border-color: #667eea;
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
         }
 
         .gallery-item img {
-            width: 100%;
-            height: 400px;
-            object-fit: cover;
-            display: block;
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
 
         .gallery-caption {
-            padding: 20px;
-            background: #fafafa;
+            margin-top: 15px;
         }
 
         .gallery-caption h4 {
             font-size: 1.2em;
-            margin-bottom: 8px;
             color: #333;
+            margin-bottom: 5px;
         }
 
         .gallery-caption p {
@@ -187,109 +184,161 @@
             font-size: 0.95em;
         }
 
-        /* Code blocks */
-        pre {
-            background: #2d2d2d;
-            color: #f8f8f2;
-            padding: 20px;
-            border-radius: 8px;
-            overflow-x: auto;
-            margin: 20px 0;
-            font-size: 0.9em;
-            line-height: 1.5;
-        }
-
-        code {
-            font-family: 'Courier New', Courier, monospace;
-        }
-
-        /* Architecture diagram */
-        .architecture {
-            text-align: center;
+        .pipeline-section {
+            background: white;
             margin: 40px 0;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            text-align: center;
         }
 
-        .architecture img {
-            max-width: 100%;
-            border-radius: 10px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        .pipeline-section h2 {
+            font-size: 2.2em;
+            margin-bottom: 30px;
+            color: #667eea;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 15px;
         }
 
-        /* Citation box */
+
+
+        /* Citation */
+        .citation-section {
+            background: white;
+            margin: 40px 0;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .citation-section h2 {
+            font-size: 2.2em;
+            margin-bottom: 20px;
+            color: #667eea;
+            text-align: center;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 15px;
+        }
+
         .citation-box {
             background: #f8f9fa;
-            border-left: 4px solid #667eea;
+            border-radius: 8px;
             padding: 20px;
-            margin: 30px 0;
-            border-radius: 5px;
+            margin-top: 20px;
+            border-left: 4px solid #667eea;
         }
 
         .citation-box pre {
-            background: #2d2d2d;
-            color: #f8f8f2;
-            padding: 15px;
-            border-radius: 5px;
-            font-size: 0.85em;
-            margin-top: 10px;
+            margin: 0;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9em;
+            line-height: 1.4;
+            color: #333;
+            overflow-x: auto;
         }
 
-        /* Footer */
-        footer {
-            text-align: center;
-            padding: 40px 20px;
-            background: #2d3748;
-            color: white;
-            margin-top: 60px;
+        .citation-box code {
+            background: none;
+            padding: 0;
         }
 
-        footer a {
-            color: #667eea;
-            text-decoration: none;
+        /* Pipeline 图片缩小 */
+        .pipeline-section img {
+            max-width: 80%;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
         }
 
-        footer a:hover {
-            text-decoration: underline;
+        /* Responsive Design */
+        @media (max-width: 1200px) {
+            /* 中等屏幕：文创3张一排 */
+            .gallery-grid.wc-grid {
+                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            }
+            
+            /* 婚书保持2张一排 */
+            .gallery-grid.wedding-grid {
+                grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            }
+            
+            .gallery-grid.wedding-1-grid {
+                grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+            }
         }
 
-        /* Responsive */
+        @media (max-width: 900px) {
+            /* 小屏幕：文创2张一排 */
+            .gallery-grid.wc-grid {
+                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            }
+            
+            /* 婚书1张一排 */
+            .gallery-grid.wedding-grid,
+            .gallery-grid.wedding-1-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            /* Pipeline图片进一步缩小 */
+            .pipeline-section img {
+                max-width: 90%;
+            }
+        }
+
         @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            header {
+                padding: 40px 15px;
+            }
+            
             header h1 {
                 font-size: 1.8em;
             }
-
-            header p {
+            
+            .subtitle {
+                font-size: 1.1em;
+                margin-bottom: 15px;
+            }
+            
+            .description {
                 font-size: 1em;
+                margin-bottom: 15px;
+                padding: 0 10px;
             }
-
-            .badges {
-                flex-direction: column;
-                align-items: center;
+            
+            .description-zh {
+                font-size: 0.95em;
+                margin-bottom: 25px;
+                padding: 0 10px;
             }
-
-            .section {
-                padding: 20px;
-            }
-
-            .gallery {
+            
+            /* 手机：所有图片1张一排 */
+            .gallery-grid,
+            .gallery-grid.wc-grid,
+            .gallery-grid.wedding-grid,
+            .gallery-grid.wedding-1-grid {
                 grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            
+            .gallery-section,
+            .pipeline-section,
+            .citation-section {
+                padding: 20px;
+                margin: 20px 0;
+            }
+            
+            /* Pipeline图片手机端全宽 */
+            .pipeline-section img {
+                max-width: 100%;
             }
         }
 
-        /* Animation */
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
 
-        .section {
-            animation: fadeInUp 0.6s ease-out;
-        }
     </style>
 </head>
 <body>
@@ -297,9 +346,18 @@
     <header>
         <div class="container">
             <h1>🖌️ UniCalli</h1>
-            <p>A Unified Diffusion Framework for Column-Level Generation and Recognition of Chinese Calligraphy</p>
+            <p class="subtitle">A Unified Diffusion Framework for Column-Level Generation and Recognition of Chinese Calligraphy</p>
+            <p class="description">
+                UniCalli is a groundbreaking unified diffusion framework that addresses column-level generation of Chinese calligraphy. 
+                Unlike existing methods that focus on isolated character generation or compromise calligraphic correctness for page-level synthesis, 
+                UniCalli integrates both recognition and generation tasks in a single model, achieving superior results in both stylistic fidelity and structural accuracy.
+            </p>
+            <p class="description description-zh">
+                UniCalli 是一个突破性的统一扩散模型框架，解决了中国书法列级生成问题。与现有方法专注于孤立字符生成或在页面级合成中牺牲书法正确性不同，
+                UniCalli 在单一模型中集成了识别和生成能力，使得其在风格保真度和结构准确性方面都取得了卓越的成果。
+            </p>
             <div class="badges">
-                <a href="https://arxiv.org/abs/XXXXX" class="badge arxiv" target="_blank">📄 Paper</a>
+                <a href="https://arxiv.org/abs/2510.13745" class="badge arxiv" target="_blank">📄 Paper</a>
                 <a href="https://github.com/EnVision-Research/UniCalli" class="badge github" target="_blank">💻 Code</a>
                 <a href="https://huggingface.co/TSXu/UniCalli-base" class="badge huggingface" target="_blank">🤗 Model</a>
                 <a href="https://www.modelscope.cn/models/tianshuo/UniCalli-base" class="badge modelscope" target="_blank">🌟 ModelScope</a>
@@ -309,160 +367,201 @@
     </header>
 
     <div class="container">
-        <!-- Overview -->
-        <section class="section">
-            <h2>Overview</h2>
-            <p>
-                UniCalli is a groundbreaking unified diffusion framework that addresses the computational replication of Chinese calligraphy at the column level.
-                Unlike existing methods that focus on isolated character generation or compromise calligraphic correctness for page-level synthesis,
-                UniCalli integrates both <strong>recognition</strong> and <strong>generation</strong> tasks in a single model, achieving superior results in both stylistic fidelity and structural accuracy.
-            </p>
-        </section>
+        <!-- Generated Images -->
+        <section class="gallery-section">
+            <h2>Generated Images</h2>
+            
+            <!-- Cultural Creative Works (文创作品) -->
+            <h3>Cultural Creative Works (文创作品)</h3>
+            <div class="gallery-grid wc-grid">
+                <div class="gallery-item">
+                    <img src="assets/wc_1_mf_1.png" alt="文创作品1 - 米芾体1">
+                    <div class="gallery-caption">
+                        <h4>米芾 (Mi Fu)</h4>
+                        <p>好运</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_1_mf_2.png" alt="文创作品1 - 米芾体2">
+                    <div class="gallery-caption">
+                        <h4>米芾 (Mi Fu)</h4>
+                        <p>财来</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_1_ty_1.png" alt="文创作品1 - 唐寅体1">
+                    <div class="gallery-caption">
+                        <h4>唐寅 (Tang Yin)</h4>
+                        <p>状元</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_1_ty_2.png" alt="文创作品1 - 唐寅体2">
+                    <div class="gallery-caption">
+                        <h4>唐寅 (Tang Yin)</h4>
+                        <p>暴瘦</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_1_zj_1.png" alt="文创作品1 - 赵佶体1">
+                    <div class="gallery-caption">
+                        <h4>赵佶 (Zhao Ji)</h4>
+                        <p>暴富</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_1_zj_2.png" alt="文创作品1 - 赵佶体2">
+                    <div class="gallery-caption">
+                        <h4>赵佶 (Zhao Ji)</h4>
+                        <p>平安</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_1_zmf_1.png" alt="文创作品1 - 赵孟頫体1">
+                    <div class="gallery-caption">
+                        <h4>赵孟頫 (Zhao Mengfu)</h4>
+                        <p>暴富</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_1_zmf_2.png" alt="文创作品1 - 赵孟頫体2">
+                    <div class="gallery-caption">
+                        <h4>赵孟頫 (Zhao Mengfu)</h4>
+                        <p>平安</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_2_sgt.png" alt="文创作品2 - 孙过庭体">
+                    <div class="gallery-caption">
+                        <h4>孙过庭 (Sun Guoting)</h4>
+                        <p>财源滚滚</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_2_wxz.png" alt="文创作品2 - 王羲之体">
+                    <div class="gallery-caption">
+                        <h4>王羲之 (Wang Xizhi)</h4>
+                        <p>金榜题名</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_2_zj.png" alt="文创作品2 - 赵佶体">
+                    <div class="gallery-caption">
+                        <h4>赵佶 (Zhao Ji)</h4>
+                        <p>逢考必过</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_2_zmf.png" alt="文创作品2 - 赵孟頫体">
+                    <div class="gallery-caption">
+                        <h4>赵孟頫 (Zhao Mengfu)</h4>
+                        <p>时来运转</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_3_htj.png" alt="文创作品3 - 黄庭坚体">
+                    <div class="gallery-caption">
+                        <h4>黄庭坚 (Huang Tingjian)</h4>
+                        <p>时来运转</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_3_mf.png" alt="文创作品3 - 米芾体">
+                    <div class="gallery-caption">
+                        <h4>米芾 (Mi Fu)</h4>
+                        <p>金榜题名</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_3_mf_2.png" alt="文创作品3 - 米芾体2">
+                    <div class="gallery-caption">
+                        <h4>米芾 (Mi Fu)</h4>
+                        <p>财源滚滚</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_3_ty.png" alt="文创作品3 - 唐寅体">
+                    <div class="gallery-caption">
+                        <h4>唐寅 (Tang Yin)</h4>
+                        <p>逢考必过</p>
+                    </div>
+                </div>
+            </div>
 
-        <!-- Key Features -->
-        <section class="section">
-            <h2>Key Features</h2>
-            <div class="features">
-                <div class="feature-card">
-                    <div class="feature-icon">🔄</div>
-                    <h3>Unified Architecture</h3>
-                    <p>First framework to unify column-level calligraphy generation and recognition in a single model</p>
+            <!-- Wedding Certificates (婚书) -->
+            <h3>Wedding Certificates (婚书)</h3>
+            
+            <!-- Wedding 1 系列 - 横版大图 -->
+            <div class="gallery-grid wedding-1-grid">
+                <div class="gallery-item">
+                    <img src="assets/wedding_1_zj.png" alt="婚书1 - 赵佶体">
+                    <div class="gallery-caption">
+                        <h4>赵佶 (Zhao Ji)</h4>
+                        <p>Wedding Certificate 1</p>
+                    </div>
                 </div>
-                <div class="feature-card">
-                    <div class="feature-icon">✍️</div>
-                    <h3>Multi-Master Styles</h3>
-                    <p>Supports diverse calligraphic styles from Wang Xizhi, Yan Zhenqing, Ouyang Xun, and more</p>
+                <div class="gallery-item">
+                    <img src="assets/wedding_1_zmf.png" alt="婚书1 - 赵孟頫体">
+                    <div class="gallery-caption">
+                        <h4>赵孟頫 (Zhao Mengfu)</h4>
+                        <p>Wedding Certificate 1</p>
+                    </div>
                 </div>
-                <div class="feature-card">
-                    <div class="feature-icon">📚</div>
-                    <h3>Densely Annotated Data</h3>
-                    <p>Trained on large-scale dataset with detailed annotations including bounding boxes and transcriptions</p>
+            </div>
+            
+            <!-- Wedding 2 系列 - 竖版图片 -->
+            <div class="gallery-grid wedding-grid">
+                <div class="gallery-item">
+                    <img src="assets/wedding_2_mf.png" alt="婚书2 - 米芾体">
+                    <div class="gallery-caption">
+                        <h4>米芾 (Mi Fu)</h4>
+                        <p>Wedding Certificate 2</p>
+                    </div>
                 </div>
-                <div class="feature-card">
-                    <div class="feature-icon">🎨</div>
-                    <h3>High-Quality Output</h3>
-                    <p>Superior stylistic fidelity and structural accuracy compared to existing methods</p>
+                <div class="gallery-item">
+                    <img src="assets/wedding_2_ty.png" alt="婚书2 - 唐寅体">
+                    <div class="gallery-caption">
+                        <h4>唐寅 (Tang Yin)</h4>
+                        <p>Wedding Certificate 2</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wedding_2_zjz.png" alt="婚书2 - 张即之体">
+                    <div class="gallery-caption">
+                        <h4>张即之 (Zhang Jizhi)</h4>
+                        <p>Wedding Certificate 2</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Poetry (诗词) -->
+            <h3>Poetry (诗词)</h3>
+            <div class="gallery-grid">
+                <div class="gallery-item">
+                    <img src="assets/qjj.png" alt="将进酒 - 李白">
+                    <div class="gallery-caption">
+                        <h4>将进酒 (Li Bai)</h4>
+                        <p>"Invitation to Wine" by Li Bai</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/cmbjx.png" alt="春眠不觉晓">
+                    <div class="gallery-caption">
+                        <h4>春晓 (Meng Haoran)</h4>
+                        <p>"Spring Dawn" - 春眠不觉晓</p>
+                    </div>
                 </div>
             </div>
         </section>
 
-        <!-- Architecture -->
-        <section class="section">
-            <h2>Architecture</h2>
-            <div class="architecture">
-                <img src="assets/architecture.png" alt="UniCalli Architecture" />
-                <p style="margin-top: 15px; color: #666;">
-                    <em>The unified architecture of UniCalli integrating both generation and recognition pathways</em>
-                </p>
-            </div>
-        </section>
-
-        <!-- Examples -->
-        <section class="section">
-            <h2>Generated Examples</h2>
-            <p style="margin-bottom: 30px;">
-                Below are some examples of calligraphy generated by UniCalli across different styles and masters.
-                Each example showcases the model's ability to capture authentic calligraphic characteristics.
-            </p>
-
-            <div class="gallery">
-                <div class="gallery-item">
-                    <img src="assets/example_1.png" alt="Regular Script Example">
-                    <div class="gallery-caption">
-                        <h4>Regular Script (楷书)</h4>
-                        <p>Style: Wang Xizhi (王羲之) | Text: "春眠不觉晓"</p>
-                    </div>
-                </div>
-
-                <div class="gallery-item">
-                    <img src="assets/example_2.png" alt="Running Script Example">
-                    <div class="gallery-caption">
-                        <h4>Running Script (行书)</h4>
-                        <p>Style: Yan Zhenqing (颜真卿) | Text: "处处闻啼鸟"</p>
-                    </div>
-                </div>
-
-                <div class="gallery-item">
-                    <img src="assets/example_3.png" alt="Cursive Script Example">
-                    <div class="gallery-caption">
-                        <h4>Cursive Script (草书)</h4>
-                        <p>Style: Huaisu (怀素) | Text: "夜来风雨声"</p>
-                    </div>
-                </div>
-
-                <div class="gallery-item">
-                    <img src="assets/example_4.png" alt="Emperor Huizong Style">
-                    <div class="gallery-caption">
-                        <h4>Slender Gold (瘦金体)</h4>
-                        <p>Style: Emperor Huizong (赵佶) | Text: "花落知多少"</p>
-                    </div>
-                </div>
-
-                <div class="gallery-item">
-                    <img src="assets/example_5.png" alt="Ouyang Xun Style">
-                    <div class="gallery-caption">
-                        <h4>Regular Script (楷书)</h4>
-                        <p>Style: Ouyang Xun (欧阳询) | Text: "月落乌啼霜"</p>
-                    </div>
-                </div>
-
-                <div class="gallery-item">
-                    <img src="assets/example_6.png" alt="Multi-style Comparison">
-                    <div class="gallery-caption">
-                        <h4>Style Comparison</h4>
-                        <p>Same text in different calligraphic styles</p>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Quick Start -->
-        <section class="section">
-            <h2>Quick Start</h2>
-
-            <h3>Installation</h3>
-            <pre><code># Create conda environment
-conda create -n unicalli python=3.10
-conda activate unicalli
-
-# Install dependencies
-pip install torch torchvision diffusers transformers
-pip install huggingface-hub opencv-python pillow
-
-# Clone repository
-git clone https://github.com/EnVision-Research/UniCalli.git
-cd unicalli</code></pre>
-
-            <h3>Download Model</h3>
-            <pre><code># Download from Hugging Face
-huggingface-cli download TSXu/UniCalli-base \
-    unicalli-base_cleaned.bin --local-dir ./checkpoints</code></pre>
-
-            <h3>Generate Calligraphy</h3>
-            <pre><code>from inference import CalligraphyGenerator
-
-# Initialize generator
-generator = CalligraphyGenerator(
-    model_name="flux-dev",
-    device="cuda",
-    checkpoint_path="checkpoints/unicalli-base_cleaned.bin",
-    font_descriptions_path='dataset/chirography.json',
-    author_descriptions_path='dataset/calligraphy_styles_en.json'
-)
-
-# Generate (must be 5 characters)
-image, cond_img = generator.generate(
-    text="春眠不觉晓",
-    font_style="楷",  # 楷/草/行
-    author="王羲之",
-    save_path="output.png",
-    num_steps=50,
-    seed=42
-)</code></pre>
+        <!-- Pipeline -->
+        <section class="pipeline-section">
+            <h2>Pipeline</h2>
+            <img src="assets/pipeline.png" alt="UniCalli Pipeline" />
         </section>
 
         <!-- Citation -->
-        <section class="section">
+        <section class="citation-section">
             <h2>Citation</h2>
             <p>If you find UniCalli useful in your research, please cite our paper:</p>
             <div class="citation-box">
@@ -471,44 +570,11 @@ image, cond_img = generator.generate(
          Generation and Recognition of Chinese Calligraphy},
   author={Xu, Tianshuo and Wang, Kai and Chen, Zhifei and Wu, Leyi
           and Wen, Tianshui and Chao, Fei and Chen, Ying-Cong},
-  journal={arXiv preprint arXiv:2025.XXXXX},
+  journal={arXiv preprint arXiv:2510.13745},
   year={2025}
 }</code></pre>
             </div>
         </section>
-
-        <!-- Links -->
-        <section class="section">
-            <h2>Resources</h2>
-            <ul style="list-style: none; padding: 0;">
-                <li style="margin: 15px 0;">
-                    <strong>📄 Paper:</strong>
-                    <a href="https://arxiv.org/abs/XXXXX" target="_blank">arXiv:2025.XXXXX</a>
-                </li>
-                <li style="margin: 15px 0;">
-                    <strong>🤗 Model:</strong>
-                    <a href="https://huggingface.co/TSXu/UniCalli-base" target="_blank">Hugging Face Hub</a>
-                </li>
-                <li style="margin: 15px 0;">
-                    <strong>💻 Code:</strong>
-                    <a href="https://github.com/EnVision-Research/UniCalli" target="_blank">GitHub Repository</a>
-                </li>
-                <li style="margin: 15px 0;">
-                    <strong>📧 Contact:</strong>
-                    Open an issue on GitHub or contact the authors
-                </li>
-            </ul>
-        </section>
     </div>
-
-    <!-- Footer -->
-    <footer>
-        <p>&copy; 2025 UniCalli Team. Released under Apache 2.0 License.</p>
-        <p style="margin-top: 10px;">
-            <a href="https://arxiv.org/abs/XXXXX">Paper</a> |
-            <a href="https://github.com/EnVision-Research/UniCalli">GitHub</a> |
-            <a href="https://huggingface.co/TSXu/UniCalli-base">Model</a>
-        </p>
-    </footer>
 </body>
 </html>

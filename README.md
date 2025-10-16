@@ -10,7 +10,7 @@ English | [简体中文](README_zh.md)
 
 ## Overview
 
-UniCalli is a groundbreaking unified diffusion framework that addresses the computational replication of Chinese calligraphy at the column level. Unlike existing methods that focus on isolated character generation or compromise calligraphic correctness for page-level synthesis, UniCalli integrates both recognition and generation tasks in a single model, achieving superior results in both stylistic fidelity and structural accuracy.
+UniCalli is a groundbreaking unified diffusion framework that addresses column-level generation of Chinese calligraphy. Unlike existing methods that focus on isolated character generation or compromise calligraphic correctness for page-level synthesis, UniCalli integrates both recognition and generation tasks in a single model, achieving superior results in both stylistic fidelity and structural accuracy.
 
 
 ### Key Features
