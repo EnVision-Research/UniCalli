@@ -20,9 +20,9 @@ UniCalli is a groundbreaking unified diffusion framework that addresses column-l
 - **Densely Annotated Data**: Trained on large-scale calligraphy dataset with detailed annotations
 
 ## Licence
-For academic research and non-commercial use only. For commercial use, please contact the authors. Additionally, we also offer a commercial-grade model with better performance and less noise.
+For academic research and non-commercial use only. For commercial use, please contact the authors. 
 
-本模型仅供学术研究、非商业使用，商业使用请联系作者，另外我们还提供性能更好、噪声更少的商业级模型
+本模型仅供学术研究、非商业使用，商业使用请联系作者。
 
 ## TODO List
 

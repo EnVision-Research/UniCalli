@@ -20,9 +20,9 @@ UniCalli 是一个突破性的统一扩散框架，解决了中国书法列级�
 
 ## 许可证
 
-仅供学术研究和非商业使用。商业使用请联系作者。此外，我们还提供性能更好、噪声更少的商业级模型。
+仅供学术研究和非商业使用。商业使用请联系作者。
 
-For academic research and non-commercial use only. For commercial use, please contact the authors. Additionally, we also offer a commercial-grade model with better performance and less noise.
+For academic research and non-commercial use only. For commercial use, please contact the authors. 
 
 ## TODO 列表
 
