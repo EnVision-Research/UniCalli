@@ -7,6 +7,7 @@ Author and font style controllable generation
 import os
 import json
 import torch
+from optimum.quanto import quantize, freeze, qint4
 from PIL import Image, ImageDraw, ImageFont
 from typing import Optional, List, Union, Dict, Any
 from einops import rearrange
@@ -43,6 +44,7 @@ class CalligraphyGenerator:
         font_descriptions_path: str = "chirography.json",
         author_descriptions_path: str = "calligraphy_styles_en.json",
         use_deepspeed: bool = False,
+        use_4bit_quantization: bool = False,
         deepspeed_config: Optional[str] = None
     ):
         """
@@ -66,6 +68,7 @@ class CalligraphyGenerator:
         self.is_schnell = model_name == "flux-schnell"
         self.use_deepspeed = use_deepspeed
         self.deepspeed_config = deepspeed_config
+        self.use_4bit_quantization = use_4bit_quantization
 
         # Load font and author style descriptions
         if os.path.exists(font_descriptions_path):
@@ -187,16 +190,19 @@ class CalligraphyGenerator:
         checkpoint = self._load_checkpoint_file(checkpoint_path)
 
         # Load weights into model
-        try:
-            model.load_state_dict(checkpoint, strict=True)
-            print("Successfully loaded checkpoint (strict mode)")
-        except RuntimeError as e:
-            print(f"Strict loading failed: {e}")
-            print("Attempting partial loading...")
-            model.load_state_dict(checkpoint, strict=False)
+        model.load_state_dict(checkpoint, strict=False)
+
+        # Apply 4-bit quantization if requested
+        if hasattr(self, 'use_4bit_quantization') and self.use_4bit_quantization:
+            print("Applying 4-bit quantization...")
+            model = model.float()  # 先转为 float32
+            quantize(model, weights=qint4)
+            freeze(model)
+            model._is_quantized = True  # 添加标记供 xflux_pipeline 检查
+            print("4-bit quantization complete!")
 
         # Move to GPU only if NOT using DeepSpeed (DeepSpeed will handle device placement)
-        if not use_deepspeed and offload:
+        if not use_deepspeed:
             print(f"Moving model to {self.device}...")
             model = model.to(self.device)
 

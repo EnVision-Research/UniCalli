@@ -28,6 +28,7 @@ For academic research and non-commercial use only. For commercial use, please co
 
 - [x] **模型发布** - 不带 pred_box 的基础版本
 - [x] **推理代码**
+- [x] **4-bit量化** - 仅需要18G显存！
 - [ ] **交互式演示**
 - [ ] **数据集发布**
 - [ ] **训练代码**
@@ -74,9 +75,13 @@ MD5: 579e8932d773f5f58ebb2c643aa89ba9
 
 ## 使用方法
 
-### 基础生成
+### 4-bit量化 (GPU Memory < 18G>)
 
-您可以直接使用 API：
+⚠️ **注意**: 4-bit量化会影响生成质量，如果对质量要求较高，可以运行deepspeed版。
+
+```bash
+pip install optimum-quanto
+```
 
 ```python
 from inference import CalligraphyGenerator
@@ -90,6 +95,8 @@ generator = CalligraphyGenerator(
     checkpoint_path="unicalli-base_cleaned.bin",
     font_descriptions_path='dataset/chirography.json',
     author_descriptions_path='dataset/calligraphy_styles_en.json'
+    use_deepspeed=False,
+    use_4bit_quantization=True,  # Enable 4-bit quantization
 )
 
 # 生成书法（必须是5个字符）
@@ -103,7 +110,7 @@ image, cond_img = generator.generate(
 )
 ```
 
-### 使用 DeepSpeed 进行内存优化
+### 使用 DeepSpeed 进行内存优化 (GPU Memory < 40G>)
 
 对于大型模型或有限的 GPU 内存，可以使用 DeepSpeed ZeRO：
 

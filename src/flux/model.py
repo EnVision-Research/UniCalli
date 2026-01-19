@@ -117,6 +117,7 @@ class Flux(nn.Module):
     
     def init_module_embeddings(self, tokens_num: int, cond_txt_channel=896):
         self.module_embeddings = nn.Parameter(torch.zeros(1, tokens_num, self.hidden_size))
+        # self.module_embeddings = nn.Parameter(torch.zeros(1, 1, self.hidden_size))
         self.cond_txt_in = nn.Linear(cond_txt_channel, self.hidden_size)
         self.learnable_txt_ids = nn.Parameter(torch.zeros(1, 512, 3))
 

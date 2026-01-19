@@ -28,6 +28,7 @@ For academic research and non-commercial use only. For commercial use, please co
 
 - [x] **Model Release** - Base version without pred_box
 - [x] **Inference Code**
+- [x] **4-bit Quantization** - Only requires 18G GPU memory!
 - [ ] **Interactive Demo**
 - [ ] **Dataset Release**
 - [ ] **Training Code**
@@ -70,9 +71,16 @@ https://www.fonts.net.cn/font-31659110985.html
 MD5: 579e8932d773f5f58ebb2c643aa89ba9
 ```
 
-## Usage
+## Usage 
 
-You can also use the API directly:
+### 4-bit Quantization (GPU Memory < 18GB)
+
+
+ ⚠️ **Note**: 4-bit quantization significantly reduces VRAM usage but may result in slightly degraded output quality.
+
+```bash
+pip install optimum-quanto
+```
 
 ```python
 from inference import CalligraphyGenerator
@@ -84,7 +92,9 @@ generator = CalligraphyGenerator(
     intern_vlm_path="path/to/InternVL3-1B",
     checkpoint_path="unicalli-base_cleaned.bin",
     font_descriptions_path='dataset/chirography.json',
-    author_descriptions_path='dataset/calligraphy_styles_en.json'
+    author_descriptions_path='dataset/calligraphy_styles_en.json',
+    use_deepspeed=False,
+    use_4bit_quantization=True,  # Enable 4-bit quantization
 )
 
 image, cond_img = generator.generate(
@@ -97,9 +107,8 @@ image, cond_img = generator.generate(
 )
 ```
 
-### Using DeepSpeed for Memory Optimization
+### Using DeepSpeed for Memory Optimization (GPU Memory < 40G)
 
-For large models or limited GPU memory, you can use DeepSpeed ZeRO:
 
 ```python
 from inference import CalligraphyGenerator
@@ -113,6 +122,7 @@ generator = CalligraphyGenerator(
     font_descriptions_path='dataset/chirography.json',
     author_descriptions_path='dataset/calligraphy_styles_en.json',
     use_deepspeed=True,
+    use_4bit_quantization=False,
     deepspeed_config="ds_config_zero2.json"
 )
 

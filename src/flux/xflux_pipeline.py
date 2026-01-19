@@ -336,6 +336,21 @@ class XFluxPipeline:
             if self.offload:
                 self.offload_model_to_cpu(self.t5, self.clip)
                 self.model = self.model.to(self.device)
+                
+            # 4-bit 量化模型需要 float32 输入
+            if hasattr(self.model, '_is_quantized') and self.model._is_quantized:
+                x = x.float()
+                inp_cond = {k: v.float() if torch.is_tensor(v) and v.is_floating_point() else v 
+                            for k, v in inp_cond.items()}
+                neg_inp_cond = {k: v.float() if torch.is_tensor(v) and v.is_floating_point() else v 
+                                for k, v in neg_inp_cond.items()}
+                cond_latent = cond_latent.float() if cond_latent is not None else None
+                cond_txt_latent = cond_txt_latent.float() if cond_txt_latent is not None else None
+                if image_proj is not None:
+                    image_proj = image_proj.float()
+                if neg_image_proj is not None:
+                    neg_image_proj = neg_image_proj.float()
+
             if self.controlnet_loaded:
                 x = denoise_controlnet(
                     self.model,
