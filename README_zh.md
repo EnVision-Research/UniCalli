@@ -75,7 +75,7 @@ MD5: 579e8932d773f5f58ebb2c643aa89ba9
 
 ## 使用方法
 
-### 4-bit量化 (GPU Memory < 18G>)
+### 4-bit量化 (GPU Memory < 18G)
 
 ⚠️ **注意**: 4-bit量化会影响生成质量，如果对质量要求较高，可以运行deepspeed版。
 
@@ -110,7 +110,7 @@ image, cond_img = generator.generate(
 )
 ```
 
-### 使用 DeepSpeed 进行内存优化 (GPU Memory < 40G>)
+### 使用 DeepSpeed 进行内存优化 (GPU Memory < 40G)
 
 对于大型模型或有限的 GPU 内存，可以使用 DeepSpeed ZeRO：
 
