@@ -8,6 +8,10 @@
 
 English | [简体中文](README_zh.md)
 
+<p align="center">
+  <img src="docs/assets/demo.png" alt="UniCalli Demo" width="800">
+</p>
+
 ## Overview
 
 UniCalli is a groundbreaking unified diffusion framework that addresses column-level generation of Chinese calligraphy. Unlike existing methods that focus on isolated character generation or compromise calligraphic correctness for page-level synthesis, UniCalli integrates both recognition and generation tasks in a single model, achieving superior results in both stylistic fidelity and structural accuracy.
@@ -29,7 +33,7 @@ For academic research and non-commercial use only. For commercial use, please co
 - [x] **Model Release** - Base version without pred_box
 - [x] **Inference Code**
 - [x] **4-bit Quantization** - Only requires 18G GPU memory!
-- [ ] **Interactive Demo**
+- [x] **Interactive Demo**
 - [ ] **Dataset Release**
 - [ ] **Training Code**
 
@@ -73,6 +77,12 @@ MD5: 579e8932d773f5f58ebb2c643aa89ba9
 
 ## Usage 
 
+### Run Demo (Gradio Interface)
+
+```bash
+python app.py
+```
+
 ### 4-bit Quantization (GPU Memory < 18GB)
 
 
@@ -99,11 +109,11 @@ generator = CalligraphyGenerator(
 
 image, cond_img = generator.generate(
     text="生日快乐喵",  # Must be 5 characters
-    font_style="楷",    # 楷(Regular)/草(Cursive)/行(Running)
-    author="赵佶",    # Or None to use synthetic style
+    font_style="草",    # 楷(Regular)/草(Cursive)/行(Running)
+    author="黄庭坚",    # Or None to use synthetic style
     save_path="output.png",
-    num_steps=39,
-    seed=1128293374,
+    num_steps=25,
+    seed=42,
 )
 ```
 

@@ -24,13 +24,14 @@ wheels/
 weights/
 
 ckpts/
+InternVL3-1B/
 # word_dataset/
 unifont/
 sourcehan/
 wandb/
 libs/
 test_data/
-*.ttf
+#*.ttf
 cache_*
 comparisons/
 *.pt

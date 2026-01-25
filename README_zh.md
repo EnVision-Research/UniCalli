@@ -8,6 +8,10 @@
 
 [English](README.md) | 简体中文
 
+<p align="center">
+  <img src="docs/assets/demo.png" alt="UniCalli Demo" width="800">
+</p>
+
 ## 概述
 
 UniCalli 是一个突破性的统一扩散框架，解决了中国书法列级生成问题。与现有方法专注于孤立字符生成或在页面级合成中牺牲书法正确性不同，UniCalli 在单一模型中集成了识别和生成任务，在风格保真度和结构准确性方面都取得了卓越的成果。
@@ -29,7 +33,7 @@ For academic research and non-commercial use only. For commercial use, please co
 - [x] **模型发布** - 不带 pred_box 的基础版本
 - [x] **推理代码**
 - [x] **4-bit量化** - 仅需要18G显存！
-- [ ] **交互式演示**
+- [x] **交互式演示**
 - [ ] **数据集发布**
 - [ ] **训练代码**
 
@@ -75,6 +79,12 @@ MD5: 579e8932d773f5f58ebb2c643aa89ba9
 
 ## 使用方法
 
+### 运行演示 (Gradio 界面)
+
+```bash
+python app.py
+```
+
 ### 4-bit量化 (GPU Memory < 18G)
 
 ⚠️ **注意**: 4-bit量化会影响生成质量，如果对质量要求较高，可以运行deepspeed版。
@@ -101,12 +111,12 @@ generator = CalligraphyGenerator(
 
 # 生成书法（必须是5个字符）
 image, cond_img = generator.generate(
-    text="生日快乐喵",  # 必须是5个字符
-    font_style="楷",    # 楷(楷书)/草(草书)/行(行书)
-    author="赵佶",    # 或 None 使用合成风格
+    text="生日快乐喵",  # Must be 5 characters
+    font_style="草",    # 楷(Regular)/草(Cursive)/行(Running)
+    author="黄庭坚",    # Or None to use synthetic style
     save_path="output.png",
-    num_steps=39,
-    seed=1128293374,
+    num_steps=25,
+    seed=42,
 )
 ```
 
