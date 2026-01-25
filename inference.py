@@ -12,10 +12,78 @@ from PIL import Image, ImageDraw, ImageFont
 from typing import Optional, List, Union, Dict, Any
 from einops import rearrange
 from pypinyin import lazy_pinyin
+from huggingface_hub import hf_hub_download, snapshot_download
 
 from src.flux.util import configs, load_ae, load_clip, load_t5
 from src.flux.model import Flux
 from src.flux.xflux_pipeline import XFluxSampler
+
+
+# HuggingFace Hub model IDs
+HF_MODEL_ID = "TSXu/UniCalli-base"
+HF_CHECKPOINT_FILENAME = "unicalli-base_cleaned.bin"
+HF_INTERNVL_ID = "OpenGVLab/InternVL3-1B"
+
+
+def download_model_from_hf(
+    model_id: str = HF_MODEL_ID,
+    filename: str = HF_CHECKPOINT_FILENAME,
+    local_dir: str = None,
+    force_download: bool = False
+) -> str:
+    """
+    Download model checkpoint from HuggingFace Hub
+    
+    Args:
+        model_id: HuggingFace model repository ID
+        filename: Name of the checkpoint file to download
+        local_dir: Local directory to save the file (optional)
+        force_download: Whether to force re-download
+        
+    Returns:
+        Path to the downloaded checkpoint file
+    """
+    print(f"Downloading {filename} from HuggingFace Hub ({model_id})...")
+    
+    try:
+        checkpoint_path = hf_hub_download(
+            repo_id=model_id,
+            filename=filename,
+            local_dir=local_dir,
+            force_download=force_download
+        )
+        print(f"Model downloaded to: {checkpoint_path}")
+        return checkpoint_path
+    except Exception as e:
+        print(f"Error downloading model: {e}")
+        raise
+
+
+def ensure_checkpoint_exists(checkpoint_path: str) -> str:
+    """
+    Ensure checkpoint exists locally, download from HF Hub if not
+    
+    Args:
+        checkpoint_path: Local path or HF model ID
+        
+    Returns:
+        Path to the local checkpoint file
+    """
+    # If it's a local path and exists, return it
+    if os.path.exists(checkpoint_path):
+        return checkpoint_path
+    
+    # If checkpoint_path looks like a filename (not a full path), try to download
+    if not os.path.dirname(checkpoint_path) or checkpoint_path == HF_CHECKPOINT_FILENAME:
+        print(f"Checkpoint not found locally, downloading from HuggingFace Hub...")
+        return download_model_from_hf(filename=checkpoint_path)
+    
+    # If it looks like a HF repo ID (contains /)
+    if '/' in checkpoint_path and not os.path.exists(checkpoint_path):
+        print(f"Downloading from HuggingFace Hub: {checkpoint_path}")
+        return download_model_from_hf(model_id=checkpoint_path, filename=HF_CHECKPOINT_FILENAME)
+    
+    raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
 
 def convert_to_pinyin(text):
@@ -98,8 +166,9 @@ class CalligraphyGenerator:
         self.clip = load_clip(text_encoder_device)
         self.clip.requires_grad_(False)
 
-        # If checkpoint provided, load from checkpoint directly without loading flux weights
-        if checkpoint_path and os.path.exists(checkpoint_path):
+        # Ensure checkpoint exists (download from HF Hub if needed)
+        if checkpoint_path:
+            checkpoint_path = ensure_checkpoint_exists(checkpoint_path)
             print(f"Loading model from checkpoint: {checkpoint_path}")
             # When using DeepSpeed, don't move to GPU yet - let DeepSpeed handle it
             self.model = self._load_model_from_checkpoint(
@@ -112,7 +181,17 @@ class CalligraphyGenerator:
             if self.use_deepspeed:
                 self.model = self._init_deepspeed(self.model)
         else:
-            raise ValueError("Checkpoint path must be provided and exist for calligraphy generation.")
+            # If no checkpoint path provided, download default from HF Hub
+            print("No checkpoint path provided, downloading from HuggingFace Hub...")
+            checkpoint_path = download_model_from_hf()
+            print(f"Loading model from checkpoint: {checkpoint_path}")
+            self.model = self._load_model_from_checkpoint(
+                checkpoint_path, model_name,
+                offload=offload,
+                use_deepspeed=self.use_deepspeed
+            )
+            if self.use_deepspeed:
+                self.model = self._init_deepspeed(self.model)
 
         # Load VAE
         if self.use_deepspeed or offload:
@@ -151,8 +230,34 @@ class CalligraphyGenerator:
         )
 
         # Font for generating condition images
-        self.font_path = "./FangZhengKaiTiFanTi-1.ttf"
+        self.font_path = self._ensure_font_exists("./FangZhengKaiTiFanTi-1.ttf")
         self.default_font_size = 102  # 128 * 0.8
+
+    def _ensure_font_exists(self, font_path: str) -> str:
+        """
+        Ensure font file exists locally, download from HF Hub if not
+        
+        Args:
+            font_path: Local path to font file
+            
+        Returns:
+            Path to the local font file
+        """
+        if os.path.exists(font_path):
+            return font_path
+        
+        # Try to download from HF Hub
+        print(f"Font file not found locally, downloading from HuggingFace Hub...")
+        try:
+            font_path = hf_hub_download(
+                repo_id=HF_MODEL_ID,
+                filename="FangZhengKaiTiFanTi-1.ttf"
+            )
+            print(f"Font downloaded to: {font_path}")
+            return font_path
+        except Exception as e:
+            print(f"Warning: Could not download font: {e}")
+            return font_path  # Return original path, may fail later
 
     def _load_model_from_checkpoint(self, checkpoint_path: str, model_name: str, offload: bool, use_deepspeed: bool = False):
         """
