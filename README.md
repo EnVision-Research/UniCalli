@@ -1,4 +1,4 @@
-# UniCalli: A Unified Diffusion Framework for Column-Level Generation and Recognition of Chinese Calligraphy
+# [ICLR26]UniCalli: A Unified Diffusion Framework for Column-Level Generation and Recognition of Chinese Calligraphy
 
 [![arXiv](https://img.shields.io/badge/arXiv-2025.13745-b31b1b.svg)](https://arxiv.org/abs/2510.13745)
 [![Project Page](https://img.shields.io/badge/Project-Page-green)](https://envision-research.github.io/UniCalli/)
