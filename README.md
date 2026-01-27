@@ -2,7 +2,8 @@
 
 [![arXiv](https://img.shields.io/badge/arXiv-2025.13745-b31b1b.svg)](https://arxiv.org/abs/2510.13745)
 [![Project Page](https://img.shields.io/badge/Project-Page-green)](https://envision-research.github.io/UniCalli/)
-[![Hugging Face](https://img.shields.io/badge/HuggingFace-Model-yellow)](https://huggingface.co/TSXu/UniCalli-base)
+[![Demo](https://img.shields.io/badge/🎨_Demo-HuggingFace-orange)](https://huggingface.co/spaces/TSXu/UniCalli_Dev)
+[![Hugging Face](https://img.shields.io/badge/HuggingFace-Model-yellow)](https://huggingface.co/TSXu/Unicalli_Pro)
 [![ModelScope](https://img.shields.io/badge/ModelScope-Model-blue)](https://www.modelscope.cn/models/tianshuo/UniCalli-base)
 [![GitHub](https://img.shields.io/github/stars/EnVision-Research/UniCalli?style=social)](https://github.com/EnVision-Research/UniCalli)
 
