@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://envision-research.github.io/UniCalli/sitemap.xml
