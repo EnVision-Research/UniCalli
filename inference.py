@@ -7,7 +7,18 @@ Author and font style controllable generation
 import os
 import json
 import torch
-from optimum.quanto import quantize, freeze, qint4
+# Quantization options
+try:
+    import bitsandbytes as bnb
+    HAS_BNB = True
+except ImportError:
+    HAS_BNB = False
+
+try:
+    from optimum.quanto import quantize, freeze, qint4
+    HAS_QUANTO = True
+except ImportError:
+    HAS_QUANTO = False
 from PIL import Image, ImageDraw, ImageFont
 from typing import Optional, List, Union, Dict, Any
 from einops import rearrange
@@ -151,7 +162,7 @@ class CalligraphyGenerator:
         )
 
         # Font for generating condition images
-        self.font_path = "./FangZhengKaiTiFanTi-1.ttf"
+        self.font_path = "./checkpoints/FangZhengKaiTiFanTi-1.ttf"
         self.default_font_size = 102  # 128 * 0.8
 
     def _load_model_from_checkpoint(self, checkpoint_path: str, model_name: str, offload: bool, use_deepspeed: bool = False):
@@ -194,18 +205,64 @@ class CalligraphyGenerator:
 
         # Apply 4-bit quantization if requested
         if hasattr(self, 'use_4bit_quantization') and self.use_4bit_quantization:
-            print("Applying 4-bit quantization...")
-            model = model.float()  # 先转为 float32
-            quantize(model, weights=qint4)
-            freeze(model)
-            model._is_quantized = True  # 添加标记供 xflux_pipeline 检查
-            print("4-bit quantization complete!")
+            if HAS_BNB:
+                print("Applying bitsandbytes NF4 quantization...")
+                model = self._quantize_model_bnb(model)
+                model._is_quantized = True
+                print("NF4 quantization complete!")
+            elif HAS_QUANTO:
+                print("Applying quanto 4-bit quantization...")
+                model = model.float()
+                quantize(model, weights=qint4)
+                freeze(model)
+                model._is_quantized = True
+                print("4-bit quantization complete!")
+            else:
+                print("Warning: No quantization library available, running in full precision")
 
         # Move to GPU only if NOT using DeepSpeed (DeepSpeed will handle device placement)
         if not use_deepspeed:
             print(f"Moving model to {self.device}...")
             model = model.to(self.device)
 
+        return model
+
+    def _quantize_model_bnb(self, model):
+        """
+        Quantize model using bitsandbytes NF4.
+        Replaces Linear layers with Linear4bit for true 4-bit inference.
+        """
+        import torch.nn as nn
+        
+        def replace_linear_with_4bit(module, name=''):
+            for child_name, child in module.named_children():
+                full_name = f"{name}.{child_name}" if name else child_name
+                
+                if isinstance(child, nn.Linear):
+                    # Create 4-bit linear layer
+                    new_layer = bnb.nn.Linear4bit(
+                        child.in_features,
+                        child.out_features,
+                        bias=child.bias is not None,
+                        compute_dtype=torch.bfloat16,
+                        compress_statistics=True,
+                        quant_type='nf4'
+                    )
+                    # Copy weights (will be quantized when moved to GPU)
+                    new_layer.weight = bnb.nn.Params4bit(
+                        child.weight.data,
+                        requires_grad=False,
+                        quant_type='nf4'
+                    )
+                    if child.bias is not None:
+                        new_layer.bias = nn.Parameter(child.bias.data)
+                    
+                    setattr(module, child_name, new_layer)
+                else:
+                    replace_linear_with_4bit(child, full_name)
+        
+        print("Replacing Linear layers with Linear4bit...")
+        replace_linear_with_4bit(model)
         return model
 
     def _init_deepspeed(self, model):
@@ -293,14 +350,27 @@ class CalligraphyGenerator:
                 - Full checkpoint with model, optimizer, etc. (from training)
                 - State dict only file
                 - Directory containing checkpoint files
+                - Safetensors file(s)
 
         Returns:
             state_dict: model state dictionary
         """
-
         # Check if it's a directory containing checkpoint files
         if os.path.isdir(checkpoint_path):
-            # Look for common checkpoint filenames
+            # Look for safetensors index first (sharded), then single file, then .bin/.pt
+            index_path = os.path.join(checkpoint_path, "model.safetensors.index.json")
+            single_safetensors = os.path.join(checkpoint_path, "model.safetensors")
+            
+            if os.path.exists(index_path):
+                # Load sharded safetensors
+                return self._load_sharded_safetensors(checkpoint_path, index_path)
+            elif os.path.exists(single_safetensors):
+                # Load single safetensors file
+                from safetensors.torch import load_file
+                print(f"Loading safetensors: {single_safetensors}")
+                return load_file(single_safetensors)
+            
+            # Fall back to .bin/.pt files
             possible_files = [
                 'model.pt', 'model.pth', 'model.bin',
                 'checkpoint.pt', 'checkpoint.pth',
@@ -316,7 +386,6 @@ class CalligraphyGenerator:
                     break
 
             if checkpoint_file is None:
-                # Try to find any .pt or .pth file
                 import glob
                 pt_files = glob.glob(os.path.join(checkpoint_path, "*.pt")) + \
                           glob.glob(os.path.join(checkpoint_path, "*.pth")) + \
@@ -329,13 +398,18 @@ class CalligraphyGenerator:
 
             checkpoint_path = checkpoint_file
 
-        # Load the checkpoint
+        # Handle safetensors files
+        if checkpoint_path.endswith('.safetensors'):
+            from safetensors.torch import load_file
+            print(f"Loading safetensors: {checkpoint_path}")
+            return load_file(checkpoint_path)
+
+        # Load the checkpoint (.bin, .pt, .pth)
         print(f"Loading checkpoint file: {checkpoint_path}")
         checkpoint = torch.load(checkpoint_path, map_location='cpu')
 
         # Handle different checkpoint formats
         if isinstance(checkpoint, dict):
-            # Check for different keys that might contain the model
             if 'model' in checkpoint:
                 state_dict = checkpoint['model']
             elif 'model_state_dict' in checkpoint:
@@ -343,27 +417,42 @@ class CalligraphyGenerator:
             elif 'state_dict' in checkpoint:
                 state_dict = checkpoint['state_dict']
             else:
-                # Assume the dict itself is the state dict
                 state_dict = checkpoint
 
-            # Log additional info if available
             if 'epoch' in checkpoint:
                 print(f"Checkpoint from epoch: {checkpoint['epoch']}")
             if 'global_step' in checkpoint:
                 print(f"Checkpoint from step: {checkpoint['global_step']}")
-            if 'loss' in checkpoint:
-                print(f"Checkpoint loss: {checkpoint['loss']:.4f}")
         else:
-            # If it's not a dict, assume it's directly the state dict
             state_dict = checkpoint
 
-        # Handle potential prefix mismatches
-        # Remove 'module.' prefix if present (from DataParallel/DistributedDataParallel)
+        # Remove 'module.' prefix if present
         if any(key.startswith('module.') for key in state_dict.keys()):
             state_dict = {key.replace('module.', ''): value
                          for key, value in state_dict.items()}
             print("Removed 'module.' prefix from state dict keys")
 
+        return state_dict
+    
+    def _load_sharded_safetensors(self, checkpoint_dir: str, index_path: str) -> dict:
+        """Load sharded safetensors checkpoint"""
+        import json
+        from safetensors.torch import load_file
+        
+        with open(index_path) as f:
+            index = json.load(f)
+        
+        weight_map = index.get("weight_map", {})
+        shard_files = set(weight_map.values())
+        
+        print(f"Loading {len(shard_files)} safetensors shards...")
+        state_dict = {}
+        for shard_file in sorted(shard_files):
+            shard_path = os.path.join(checkpoint_dir, shard_file)
+            print(f"  Loading {shard_file}...")
+            shard_dict = load_file(shard_path)
+            state_dict.update(shard_dict)
+        
         return state_dict
 
     def text_to_cond_image(

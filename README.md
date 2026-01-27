@@ -25,9 +25,9 @@ UniCalli is a groundbreaking unified diffusion framework that addresses column-l
 - **Densely Annotated Data**: Trained on large-scale calligraphy dataset with detailed annotations
 
 ## Licence
-For academic research and non-commercial use only. For commercial use, please contact the authors. 
+For academic research and non-commercial use only. 
 
-本模型仅供学术研究、非商业使用，商业使用请联系作者。
+本模型仅供学术研究、非商业使用。
 
 ## TODO List
 
@@ -50,11 +50,11 @@ pip install -r requirements.txt
 
 ### Download Model
 
-Download the pretrained model from Hugging Face:
+Download the complete model package (includes checkpoint, InternVL embedding, and font) from Hugging Face:
 
 ```bash
-# Using huggingface-cli
-huggingface-cli download TSXu/UniCalli-base unicalli-base_cleaned.bin --local-dir ./checkpoints
+# Using huggingface-cli (recommended)
+huggingface-cli download TSXu/UniCalli-base --local-dir ./checkpoints
 ```
 
 Or from ModelScope:
@@ -63,17 +63,6 @@ Or from ModelScope:
 # Using modelscope
 pip install modelscope
 python -c "from modelscope import snapshot_download; snapshot_download('tianshuo/UniCalli-base', local_dir='./checkpoints')"
-```
-
-### Download Other Components
-Please note that you need to download additional components to ensure the model runs properly:
-```bash
-# InternVL3-1B:
-https://huggingface.co/OpenGVLab/InternVL3-1B
-
-# Fangzheng TTF:
-https://www.fonts.net.cn/font-31659110985.html
-MD5: 579e8932d773f5f58ebb2c643aa89ba9
 ```
 
 ## Usage 
@@ -100,8 +89,8 @@ generator = CalligraphyGenerator(
     model_name="flux-dev",
     device="cuda",
     offload=False,
-    intern_vlm_path="path/to/InternVL3-1B",
-    checkpoint_path="unicalli-base_cleaned.bin",
+    intern_vlm_path="./checkpoints/internvl_embedding",  # Path to downloaded embedding
+    checkpoint_path="./checkpoints/unicalli-base_cleaned.bin",
     font_descriptions_path='dataset/chirography.json',
     author_descriptions_path='dataset/calligraphy_styles_en.json',
     use_deepspeed=False,
@@ -128,8 +117,8 @@ generator = CalligraphyGenerator(
     model_name="flux-dev",
     device="cuda",
     offload=False,  # DeepSpeed manages memory
-    intern_vlm_path="path/to/InternVL3-1B",
-    checkpoint_path="unicalli-base_cleaned.bin",
+    intern_vlm_path="./checkpoints/internvl_embedding",  # Path to downloaded embedding
+    checkpoint_path="./checkpoints/unicalli-base_cleaned.bin",
     font_descriptions_path='dataset/chirography.json',
     author_descriptions_path='dataset/calligraphy_styles_en.json',
     use_deepspeed=True,

@@ -58,7 +58,7 @@ generator = None
 generator_4bit_state = None  # Track current 4bit quantization state
 
 
-def init_generator(use_4bit: bool = True):
+def init_generator(use_4bit: bool = False):
     """Initialize the generator (lazy loading)"""
     global generator, generator_4bit_state
     
@@ -67,12 +67,16 @@ def init_generator(use_4bit: bool = True):
         generator = None
     
     if generator is None:
+        # Model paths (download via: huggingface-cli download TSXu/UniCalli-base --local-dir ./checkpoints)
+        checkpoint_path = "./checkpoints/unicalli-base_cleaned.bin"
+        intern_vlm_path = "./checkpoints/internvl_embedding"
+        
         generator = CalligraphyGenerator(
             model_name="flux-dev",
             device="cuda",
             offload=False,
-            intern_vlm_path="InternVL3-1B",
-            checkpoint_path="unicalli-base_cleaned.bin",
+            intern_vlm_path=intern_vlm_path,
+            checkpoint_path=checkpoint_path,
             font_descriptions_path='dataset/chirography.json',
             author_descriptions_path='dataset/calligraphy_styles_en.json',
             use_deepspeed=False,

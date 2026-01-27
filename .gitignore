@@ -22,9 +22,13 @@ sdist/
 var/
 wheels/
 weights/
-
+tools/
+checkpoints/
+unicalli_pro_chars7_nf4/
+internvl_embedding/
 ckpts/
 InternVL3-1B/
+UniCalli_Dev/
 # word_dataset/
 unifont/
 sourcehan/

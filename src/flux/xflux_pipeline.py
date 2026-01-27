@@ -457,12 +457,66 @@ class XFluxSampler(XFluxPipeline):
         self.offload = False
         self.ref_latent = ref_latent
 
-        self.embed_tokens = AutoModel.from_pretrained(
-            intern_vlm_path,
-            torch_dtype=torch.float32,
-            device_map="cpu",
-            trust_remote_code=True
-        ).language_model.model.embed_tokens.eval()
-        self.embed_tokens.requires_grad_(False)
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            intern_vlm_path, trust_remote_code=True, use_fast=False)
+        # Load embedding - try lightweight extracted version first, fallback to full model
+        self.embed_tokens, self.tokenizer = self._load_embedding(intern_vlm_path)
+    
+    def _load_embedding(self, intern_vlm_path):
+        """
+        Load embedding layer and tokenizer.
+        Supports two modes:
+        1. Lightweight: Load from extracted embedding files (embedding.safetensors + tokenizer)
+        2. Full: Load from complete InternVL3 model (fallback)
+        """
+        import os
+        from safetensors.torch import load_file as load_safetensors
+        
+        # Check if this is an extracted embedding directory
+        embedding_file = os.path.join(intern_vlm_path, "embedding.safetensors")
+        config_file = os.path.join(intern_vlm_path, "embedding_config.json")
+        
+        if os.path.exists(embedding_file) and os.path.exists(config_file):
+            # Lightweight mode: Load extracted embedding
+            print(f"Loading lightweight embedding from: {intern_vlm_path}")
+            
+            import json
+            with open(config_file, 'r') as f:
+                config = json.load(f)
+            
+            # Create embedding layer
+            embed_tokens = torch.nn.Embedding(
+                num_embeddings=config["num_embeddings"],
+                embedding_dim=config["embedding_dim"],
+                padding_idx=config.get("padding_idx", None)
+            )
+            
+            # Load weights
+            state_dict = load_safetensors(embedding_file)
+            embed_tokens.load_state_dict(state_dict)
+            embed_tokens.eval()
+            embed_tokens.requires_grad_(False)
+            
+            # Load tokenizer
+            tokenizer = AutoTokenizer.from_pretrained(
+                intern_vlm_path, trust_remote_code=True, use_fast=False
+            )
+            
+            print(f"Loaded lightweight embedding: {config['num_embeddings']} x {config['embedding_dim']}")
+            return embed_tokens, tokenizer
+        
+        else:
+            # Full mode: Load from complete InternVL3 model
+            print(f"Loading full InternVL3 model from: {intern_vlm_path}")
+            
+            embed_tokens = AutoModel.from_pretrained(
+                intern_vlm_path,
+                torch_dtype=torch.float32,
+                device_map="cpu",
+                trust_remote_code=True
+            ).language_model.model.embed_tokens.eval()
+            embed_tokens.requires_grad_(False)
+            
+            tokenizer = AutoTokenizer.from_pretrained(
+                intern_vlm_path, trust_remote_code=True, use_fast=False
+            )
+            
+            return embed_tokens, tokenizer

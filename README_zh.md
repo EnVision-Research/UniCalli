@@ -25,9 +25,9 @@ UniCalli 是一个突破性的统一扩散框架，解决了中国书法列级�
 
 ## 许可证
 
-仅供学术研究和非商业使用。商业使用请联系作者。
+仅供学术研究和非商业使用。
 
-For academic research and non-commercial use only. For commercial use, please contact the authors. 
+For academic research and non-commercial use only. 
 
 ## TODO 列表
 
@@ -50,11 +50,11 @@ pip install -r requirements.txt
 
 ### 下载模型
 
-从 Hugging Face 下载预训练模型：
+从 Hugging Face 下载完整模型包（包含模型、InternVL嵌入和字体）：
 
 ```bash
-# 使用 huggingface-cli
-huggingface-cli download TSXu/UniCalli-base unicalli-base_cleaned.bin --local-dir ./checkpoints
+# 使用 huggingface-cli（推荐）
+huggingface-cli download TSXu/UniCalli-base --local-dir ./checkpoints
 ```
 
 或从魔搭社区下载：
@@ -63,19 +63,6 @@ huggingface-cli download TSXu/UniCalli-base unicalli-base_cleaned.bin --local-di
 # 使用 modelscope
 pip install modelscope
 python -c "from modelscope import snapshot_download; snapshot_download('tianshuo/UniCalli-base', local_dir='./checkpoints')"
-```
-
-### 下载其他组件
-
-请注意，您需要下载额外的组件以确保模型正常运行：
-
-```bash
-# InternVL3-1B:
-https://huggingface.co/OpenGVLab/InternVL3-1B
-
-# 方正字体 TTF:
-https://www.fonts.net.cn/font-31659110985.html
-MD5: 579e8932d773f5f58ebb2c643aa89ba9
 ```
 
 ## 使用方法
@@ -102,12 +89,12 @@ generator = CalligraphyGenerator(
     model_name="flux-dev",
     device="cuda",
     offload=False,
-    intern_vlm_path="path/to/InternVL3-1B",
-    checkpoint_path="unicalli-base_cleaned.bin",
+    intern_vlm_path="./checkpoints/internvl_embedding",  # 下载的嵌入路径
+    checkpoint_path="./checkpoints/unicalli-base_cleaned.bin",
     font_descriptions_path='dataset/chirography.json',
-    author_descriptions_path='dataset/calligraphy_styles_en.json'
+    author_descriptions_path='dataset/calligraphy_styles_en.json',
     use_deepspeed=False,
-    use_4bit_quantization=True,  # Enable 4-bit quantization
+    use_4bit_quantization=True,  # 启用 4-bit 量化
 )
 
 # 生成书法（必须是5个字符）
@@ -132,8 +119,8 @@ generator = CalligraphyGenerator(
     model_name="flux-dev",
     device="cuda",
     offload=False,  # DeepSpeed 管理内存
-    intern_vlm_path="path/to/InternVL3-1B",
-    checkpoint_path="unicalli-base_cleaned.bin",
+    intern_vlm_path="./checkpoints/internvl_embedding",  # 下载的嵌入路径
+    checkpoint_path="./checkpoints/unicalli-base_cleaned.bin",
     font_descriptions_path='dataset/chirography.json',
     author_descriptions_path='dataset/calligraphy_styles_en.json',
     use_deepspeed=True,
