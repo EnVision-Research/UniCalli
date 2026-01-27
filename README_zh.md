@@ -1,7 +1,8 @@
-# UniCalli: 中国书法列级生成与识别的统一扩散框架
+# [ICLR26]UniCalli: 中国书法列级生成与识别的统一扩散框架
 
 [![arXiv](https://img.shields.io/badge/arXiv-2025.13745-b31b1b.svg)](https://arxiv.org/abs/2510.13745)
 [![项目主页](https://img.shields.io/badge/Project-Page-green)](https://envision-research.github.io/UniCalli/)
+[![Demo](https://img.shields.io/badge/🎨_Demo-HuggingFace-orange)](https://huggingface.co/spaces/TSXu/UniCalli_Dev)
 [![Hugging Face](https://img.shields.io/badge/HuggingFace-Model-yellow)](https://huggingface.co/TSXu/UniCalli-base)
 [![魔搭社区](https://img.shields.io/badge/ModelScope-Model-blue)](https://www.modelscope.cn/models/tianshuo/UniCalli-base)
 [![GitHub](https://img.shields.io/github/stars/EnVision-Research/UniCalli?style=social)](https://github.com/EnVision-Research/UniCalli)
