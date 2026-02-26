@@ -16,8 +16,7 @@ from .utils import (
     normalize_tensor
 )
 
-path = "/data/user/txu647/.cache/InternVL3-1B"
-tokenizer = AutoTokenizer.from_pretrained(path, trust_remote_code=True, use_fast=False)
+tokenizer = AutoTokenizer.from_pretrained("OpenGVLab/InternVL3-1B", trust_remote_code=True, use_fast=False)
 
 
 def load_noise_scores(csv_path):
