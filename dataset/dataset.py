@@ -9,7 +9,7 @@ from PIL import Image, ImageDraw, ImageFont
 from transformers import AutoTokenizer
 import csv
 
-from utils import (
+from .utils import (
     convert_to_pinyin,
     binarize_auto_polarity,
     is_chinese_char,
