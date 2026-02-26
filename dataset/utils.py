@@ -47,68 +47,46 @@ def score_mask(mask255, edge255, target_fg_range=(0.03, 0.35)):
 
 def binarize_auto_polarity(
     pil_img: Image.Image,
-    box_img: Image.Image = None,
-    bg_offset=10,
-    close_iters=1,
-    ksize=3,
+    use_adaptive: bool = False,
+    target_fg_range=(0.03, 0.35),
+    ksize=3, open_iters=1, close_iters=1,
+    min_area=64
 ):
     """
-    利用 box 标注区分文字/背景，计算精准阈值做二值化。
-    
-    策略：
-    - 从 box_img 提取文字区域掩码（非黑色像素 = 文字区域，box背景为黑色）
-    - 计算 box 内（文字）和 box 外（背景）的灰度均值
-    - 阈值 = 两者之间，偏向背景侧 bg_offset 个灰度值
-    - 自动检测极性（亮底暗字 or 暗底亮字）
-    
-    如果没有 box_img，退化为 Otsu。
-    
-    Returns: (binary_mask_uint8, polarity_str)
-        binary_mask: 白色前景(文字)在黑色背景上, uint8 [0,255]
-        polarity: "white" (亮底) or "black" (暗底)
+    Binarize image with automatic polarity detection
+    Always returns white text on black background
     """
+    # Convert to grayscale and apply preprocessing
     g = np.array(pil_img.convert("L"), dtype=np.uint8)
+    g = cv2.medianBlur(g, 3)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    g_eq = clahe.apply(g)
 
-    # 轻微去噪
-    g_blur = cv2.medianBlur(g, 3)
-
-    # 检测极性
-    border = np.concatenate([g[:5].flatten(), g[-5:].flatten(),
-                             g[:, :5].flatten(), g[:, -5:].flatten()])
-    polarity = "black" if border.mean() < 128 else "white"
-
-    if box_img is not None and box_img.size == pil_img.size:
-        # 从 box_img 提取文字区域掩码（box背景为黑色，非黑色像素 = 文字区域）
-        box_arr = np.array(box_img.convert("RGB"))
-        text_mask = ~((box_arr[:, :, 0] < 15) & (box_arr[:, :, 1] < 15) & (box_arr[:, :, 2] < 15))
-
-        if text_mask.any() and (~text_mask).any():
-            mean_text = float(g_blur[text_mask].mean())
-            mean_bg = float(g_blur[~text_mask].mean())
-
-            if mean_bg > mean_text:
-                # 亮底暗字：阈值在背景下方一点，低于阈值 = 前景
-                thresh = int(max(0, mean_bg - bg_offset))
-                _, binary = cv2.threshold(g_blur, thresh, 255, cv2.THRESH_BINARY_INV)
-            else:
-                # 暗底亮字：阈值在背景上方一点，高于阈值 = 前景
-                thresh = int(min(255, mean_bg + bg_offset))
-                _, binary = cv2.threshold(g_blur, thresh, 255, cv2.THRESH_BINARY)
-        else:
-            # 掩码异常，退化到 Otsu
-            _, binary = cv2.threshold(g_blur, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
+    # Generate two candidates: inverted and normal binary threshold
+    if use_adaptive:
+        cand_A = cv2.adaptiveThreshold(
+            g_eq, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY_INV, blockSize=25, C=10
+        )
+        cand_B = cv2.adaptiveThreshold(
+            g_eq, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY, blockSize=25, C=10
+        )
     else:
-        # 没有 box_img，退化到 Otsu
-        _, binary = cv2.threshold(g_blur, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
-        if polarity == "black":
-            binary = 255 - binary
+        _, cand_A = cv2.threshold(g_eq, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
+        _, cand_B = cv2.threshold(g_eq, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
 
-    # 只做闭运算填充笔画内小空洞，不做开运算（保留细节）
-    if close_iters > 0:
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (ksize, ksize))
-        binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel, iterations=close_iters)
+    # Clean up noise
+    cand_A = morph_clean(cand_A, ksize, open_iters, close_iters, min_area)
+    cand_B = morph_clean(cand_B, ksize, open_iters, close_iters, min_area)
 
-    return (binary, polarity)
+    # Score candidates
+    edges = cv2.Canny(g_eq, 50, 150)
+    score_A = score_mask(cand_A, edges, target_fg_range)
+    score_B = score_mask(cand_B, edges, target_fg_range)
+
+    # Return the better candidate (always black background with white text)
+    return (cand_A, "black") if score_A >= score_B else (cand_B, "black")
 
 
 def is_chinese_char(ch: str) -> bool:
