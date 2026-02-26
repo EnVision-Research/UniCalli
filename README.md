@@ -4,6 +4,7 @@
 [![Project Page](https://img.shields.io/badge/Project-Page-green)](https://envision-research.github.io/UniCalli/)
 [![Demo](https://img.shields.io/badge/🎨_Demo-HuggingFace-orange)](https://huggingface.co/spaces/TSXu/UniCalli_Dev)
 [![Hugging Face](https://img.shields.io/badge/HuggingFace-Model-yellow)](https://huggingface.co/TSXu/Unicalli_Pro)
+[![Dataset](https://img.shields.io/badge/HuggingFace-Dataset-blue)](https://huggingface.co/datasets/TSXu/UniCalli_dataset)
 [![ModelScope](https://img.shields.io/badge/ModelScope-Model-blue)](https://www.modelscope.cn/models/tianshuo/UniCalli-base)
 [![GitHub](https://img.shields.io/github/stars/EnVision-Research/UniCalli?style=social)](https://github.com/EnVision-Research/UniCalli)
 
@@ -35,7 +36,7 @@ For academic research and non-commercial use only.
 - [x] **Inference Code**
 - [x] **4-bit Quantization** - Only requires 18G GPU memory!
 - [x] **Interactive Demo**
-- [ ] **Dataset Release**
+- [x] **Dataset Release** - [UniCalli_dataset](https://huggingface.co/datasets/TSXu/UniCalli_dataset)
 - [ ] **Training Code**
 
 ## Getting Started

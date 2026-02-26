@@ -4,6 +4,7 @@
 [![项目主页](https://img.shields.io/badge/Project-Page-green)](https://envision-research.github.io/UniCalli/)
 [![Demo](https://img.shields.io/badge/🎨_Demo-HuggingFace-orange)](https://huggingface.co/spaces/TSXu/UniCalli_Dev)
 [![Hugging Face](https://img.shields.io/badge/HuggingFace-Model-yellow)](https://huggingface.co/TSXu/UniCalli-base)
+[![数据集](https://img.shields.io/badge/HuggingFace-Dataset-blue)](https://huggingface.co/datasets/TSXu/UniCalli_dataset)
 [![魔搭社区](https://img.shields.io/badge/ModelScope-Model-blue)](https://www.modelscope.cn/models/tianshuo/UniCalli-base)
 [![GitHub](https://img.shields.io/github/stars/EnVision-Research/UniCalli?style=social)](https://github.com/EnVision-Research/UniCalli)
 
@@ -35,7 +36,7 @@ For academic research and non-commercial use only.
 - [x] **推理代码**
 - [x] **4-bit量化** - 仅需要18G显存！
 - [x] **交互式演示**
-- [ ] **数据集发布**
+- [x] **数据集发布** - [UniCalli_dataset](https://huggingface.co/datasets/TSXu/UniCalli_dataset)
 - [ ] **训练代码**
 
 ## 快速开始
