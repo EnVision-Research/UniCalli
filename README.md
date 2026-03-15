@@ -33,10 +33,11 @@ For academic research and non-commercial use only.
 ## TODO List
 
 - [x] **Model Release** - Base version without pred_box
-- [x] **Inference Code**
+- [x] **Inference Code (Generation)**
 - [x] **4-bit Quantization** - Only requires 18G GPU memory!
 - [x] **Interactive Demo**
 - [x] **Dataset Release** - [UniCalli_dataset](https://huggingface.co/datasets/TSXu/UniCalli_dataset)
+- [ ] **Inference Code (Recognition)**
 - [ ] **Training Code**
 
 ## Getting Started
