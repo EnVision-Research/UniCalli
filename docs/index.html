@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="UniCalli: A Unified Diffusion Framework for Column-Level Generation and Recognition of Chinese Calligraphy. Generate beautiful Chinese calligraphy in various styles by historical masters.">
+    <meta name="keywords" content="UniCalli, Chinese calligraphy, AI, diffusion model, calligraphy generation, calligraphy recognition, deep learning, FLUX, 书法, 中国书法, 王羲之, 颜真卿">
+    <meta name="author" content="Tianshuo Xu, Kai Wang, Zhifei Chen, Leyi Wu, Tianshui Wen, Fei Chao, Ying-Cong Chen">
+    <meta name="robots" content="index, follow">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://envision-research.github.io/UniCalli/">
+    <meta property="og:title" content="UniCalli - Chinese Calligraphy Generation and Recognition">
+    <meta property="og:description" content="A Unified Diffusion Framework for Column-Level Generation and Recognition of Chinese Calligraphy">
+    <meta property="og:image" content="https://envision-research.github.io/UniCalli/assets/demo.png">
+    <meta property="og:site_name" content="UniCalli">
+    
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:url" content="https://envision-research.github.io/UniCalli/">
+    <meta name="twitter:title" content="UniCalli - Chinese Calligraphy Generation">
+    <meta name="twitter:description" content="Generate beautiful Chinese calligraphy with AI using historical master styles">
+    <meta name="twitter:image" content="https://envision-research.github.io/UniCalli/assets/demo.png">
+    
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://envision-research.github.io/UniCalli/">
+    
+    <!-- Google Scholar / Academic -->
+    <meta name="citation_title" content="UniCalli: A Unified Diffusion Framework for Column-Level Generation and Recognition of Chinese Calligraphy">
+    <meta name="citation_author" content="Xu, Tianshuo">
+    <meta name="citation_author" content="Wang, Kai">
+    <meta name="citation_author" content="Chen, Zhifei">
+    <meta name="citation_author" content="Wu, Leyi">
+    <meta name="citation_author" content="Wen, Tianshui">
+    <meta name="citation_author" content="Chao, Fei">
+    <meta name="citation_author" content="Chen, Ying-Cong">
+    <meta name="citation_arxiv_id" content="2510.13745">
+    
+    <title>UniCalli: Unified Chinese Calligraphy Generation and Recognition</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 60px 20px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 15px;
+            font-weight: 700;
+        }
+
+        .subtitle {
+            font-size: 1.3em;
+            margin-bottom: 20px;
+            opacity: 0.95;
+            font-weight: 500;
+            color: #f8f9fa;
+        }
+
+        .description {
+            font-size: 1.1em;
+            max-width: 900px;
+            margin: 0 auto 20px;
+            opacity: 0.9;
+            line-height: 1.6;
+            color: #e8eaf6;
+        }
+
+        .description-zh {
+            font-size: 1.05em;
+            margin-bottom: 30px;
+            opacity: 0.85;
+            font-style: italic;
+            color: #ddd6fe;
+        }
+
+        .badges {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-top: 30px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 10px 20px;
+            background: rgba(255,255,255,0.2);
+            backdrop-filter: blur(10px);
+            border-radius: 25px;
+            text-decoration: none;
+            color: white;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border: 2px solid rgba(255,255,255,0.3);
+        }
+
+        .badge:hover {
+            background: rgba(255,255,255,0.3);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        .badge.arxiv { background: linear-gradient(135deg, #b31b1b 0%, #d32f2f 100%); }
+        .badge.github { background: linear-gradient(135deg, #24292e 0%, #444d56 100%); }
+        .badge.huggingface { background: linear-gradient(135deg, #FFD21E 0%, #FFA621 100%); color: #333; }
+        .badge.modelscope { background: linear-gradient(135deg, #0066cc 0%, #004499 100%); }
+        .badge.demo { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+
+        /* Gallery Styles */
+        .gallery-section {
+            background: white;
+            margin: 40px 0;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .gallery-section h2 {
+            font-size: 2.2em;
+            margin-bottom: 20px;
+            color: #667eea;
+            text-align: center;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 15px;
+        }
+
+        .note {
+            font-size: 0.9em;
+            color: #666;
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 10px 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            font-style: italic;
+        }
+
+        .gallery-section h3 {
+            font-size: 1.8em;
+            margin: 40px 0 25px 0;
+            color: #555;
+            text-align: center;
+        }
+
+        .gallery-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        /* 文创作品 - 4张图一排 */
+        .gallery-grid.wc-grid {
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        /* 婚书 - 大尺寸横版图片，2张一排或1张一排 */
+        .gallery-grid.wedding-grid {
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 40px;
+        }
+
+        /* Wedding 1 系列 - 横版大图，更大的最小宽度 */
+        .gallery-grid.wedding-1-grid {
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 50px;
+        }
+
+        .gallery-item {
+            text-align: center;
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .gallery-item:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+        }
+
+        .gallery-item img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        .gallery-caption {
+            margin-top: 15px;
+        }
+
+        .gallery-caption h4 {
+            font-size: 1.2em;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .gallery-caption p {
+            color: #666;
+            font-size: 0.95em;
+        }
+
+        .pipeline-section {
+            background: white;
+            margin: 40px 0;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        .pipeline-section h2 {
+            font-size: 2.2em;
+            margin-bottom: 30px;
+            color: #667eea;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 15px;
+        }
+
+
+
+        /* Citation */
+        .citation-section {
+            background: white;
+            margin: 40px 0;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .citation-section h2 {
+            font-size: 2.2em;
+            margin-bottom: 20px;
+            color: #667eea;
+            text-align: center;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 15px;
+        }
+
+        .citation-box {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+            border-left: 4px solid #667eea;
+        }
+
+        .citation-box pre {
+            margin: 0;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9em;
+            line-height: 1.4;
+            color: #333;
+            overflow-x: auto;
+        }
+
+        .citation-box code {
+            background: none;
+            padding: 0;
+        }
+
+        /* Pipeline 图片缩小 */
+        .pipeline-section img {
+            max-width: 80%;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1200px) {
+            /* 中等屏幕：文创3张一排 */
+            .gallery-grid.wc-grid {
+                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            }
+            
+            /* 婚书保持2张一排 */
+            .gallery-grid.wedding-grid {
+                grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            }
+            
+            .gallery-grid.wedding-1-grid {
+                grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+            }
+        }
+
+        @media (max-width: 900px) {
+            /* 小屏幕：文创2张一排 */
+            .gallery-grid.wc-grid {
+                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            }
+            
+            /* 婚书1张一排 */
+            .gallery-grid.wedding-grid,
+            .gallery-grid.wedding-1-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            /* Pipeline图片进一步缩小 */
+            .pipeline-section img {
+                max-width: 90%;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            header {
+                padding: 40px 15px;
+            }
+            
+            header h1 {
+                font-size: 1.8em;
+            }
+            
+            .subtitle {
+                font-size: 1.1em;
+                margin-bottom: 15px;
+            }
+            
+            .description {
+                font-size: 1em;
+                margin-bottom: 15px;
+                padding: 0 10px;
+            }
+            
+            .description-zh {
+                font-size: 0.95em;
+                margin-bottom: 25px;
+                padding: 0 10px;
+            }
+            
+            /* 手机：所有图片1张一排 */
+            .gallery-grid,
+            .gallery-grid.wc-grid,
+            .gallery-grid.wedding-grid,
+            .gallery-grid.wedding-1-grid {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+            
+            .gallery-section,
+            .pipeline-section,
+            .citation-section {
+                padding: 20px;
+                margin: 20px 0;
+            }
+            
+            /* Pipeline图片手机端全宽 */
+            .pipeline-section img {
+                max-width: 100%;
+            }
+        }
+
+
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header>
+        <div class="container">
+            <h1>🖌️ UniCalli</h1>
+            <p class="subtitle">A Unified Diffusion Framework for Column-Level Generation and Recognition of Chinese Calligraphy</p>
+            <p class="description">
+                UniCalli is a groundbreaking unified diffusion framework that addresses column-level generation of Chinese calligraphy. 
+                Unlike existing methods that focus on isolated character generation or compromise calligraphic correctness for page-level synthesis, 
+                UniCalli integrates both recognition and generation tasks in a single model, achieving superior results in both stylistic fidelity and structural accuracy.
+            </p>
+            <p class="description description-zh">
+                UniCalli 是一个突破性的统一扩散模型框架，解决了中国书法列级生成问题。与现有方法专注于孤立字符生成或在页面级合成中牺牲书法正确性不同，
+                UniCalli 在单一模型中集成了识别和生成能力，使得其在风格保真度和结构准确性方面都取得了卓越的成果。
+            </p>
+            <div class="badges">
+                <a href="https://arxiv.org/abs/2510.13745" class="badge arxiv" target="_blank">📄 Paper</a>
+                <a href="https://github.com/EnVision-Research/UniCalli" class="badge github" target="_blank">💻 Code</a>
+                <a href="https://huggingface.co/TSXu/UniCalli-base" class="badge huggingface" target="_blank">🤗 Model</a>
+                <a href="https://www.modelscope.cn/models/tianshuo/UniCalli-base" class="badge modelscope" target="_blank">🌟 ModelScope</a>
+                <a href="https://huggingface.co/spaces/TSXu/UniCalli_Dev" class="badge demo">🎨 Demo</a>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Generated Images -->
+        <section class="gallery-section">
+            <h2>Generated Images</h2>
+            <p class="note">Note: Only the calligraphy text is generated by our model. Background images are sourced from the internet.<br>
+            注：仅书法文字由我们的模型生成，背景图片来自互联网。</p>
+            
+            <!-- Cultural Creative Works (文创作品) -->
+            <h3>Cultural Creative Works (文创作品)</h3>
+            <div class="gallery-grid wc-grid">
+                <div class="gallery-item">
+                    <img src="assets/wc_1_mf_1.png" alt="文创作品1 - 米芾体1">
+                    <div class="gallery-caption">
+                        <h4>米芾 (Mi Fu)</h4>
+                        <p>好运</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_1_mf_2.png" alt="文创作品1 - 米芾体2">
+                    <div class="gallery-caption">
+                        <h4>米芾 (Mi Fu)</h4>
+                        <p>财来</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_1_ty_1.png" alt="文创作品1 - 唐寅体1">
+                    <div class="gallery-caption">
+                        <h4>唐寅 (Tang Yin)</h4>
+                        <p>状元</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_1_ty_2.png" alt="文创作品1 - 唐寅体2">
+                    <div class="gallery-caption">
+                        <h4>唐寅 (Tang Yin)</h4>
+                        <p>暴瘦</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_1_zj_1.png" alt="文创作品1 - 赵佶体1">
+                    <div class="gallery-caption">
+                        <h4>赵佶 (Zhao Ji)</h4>
+                        <p>暴富</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_1_zj_2.png" alt="文创作品1 - 赵佶体2">
+                    <div class="gallery-caption">
+                        <h4>赵佶 (Zhao Ji)</h4>
+                        <p>平安</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_1_zmf_1.png" alt="文创作品1 - 赵孟頫体1">
+                    <div class="gallery-caption">
+                        <h4>赵孟頫 (Zhao Mengfu)</h4>
+                        <p>暴富</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_1_zmf_2.png" alt="文创作品1 - 赵孟頫体2">
+                    <div class="gallery-caption">
+                        <h4>赵孟頫 (Zhao Mengfu)</h4>
+                        <p>平安</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_2_sgt.png" alt="文创作品2 - 孙过庭体">
+                    <div class="gallery-caption">
+                        <h4>孙过庭 (Sun Guoting)</h4>
+                        <p>财源滚滚</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_2_wxz.png" alt="文创作品2 - 王羲之体">
+                    <div class="gallery-caption">
+                        <h4>王羲之 (Wang Xizhi)</h4>
+                        <p>金榜题名</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_2_zj.png" alt="文创作品2 - 赵佶体">
+                    <div class="gallery-caption">
+                        <h4>赵佶 (Zhao Ji)</h4>
+                        <p>逢考必过</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_2_zmf.png" alt="文创作品2 - 赵孟頫体">
+                    <div class="gallery-caption">
+                        <h4>赵孟頫 (Zhao Mengfu)</h4>
+                        <p>时来运转</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_3_htj.png" alt="文创作品3 - 黄庭坚体">
+                    <div class="gallery-caption">
+                        <h4>黄庭坚 (Huang Tingjian)</h4>
+                        <p>时来运转</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_3_mf.png" alt="文创作品3 - 米芾体">
+                    <div class="gallery-caption">
+                        <h4>米芾 (Mi Fu)</h4>
+                        <p>金榜题名</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_3_mf_2.png" alt="文创作品3 - 米芾体2">
+                    <div class="gallery-caption">
+                        <h4>米芾 (Mi Fu)</h4>
+                        <p>财源滚滚</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wc_3_ty.png" alt="文创作品3 - 唐寅体">
+                    <div class="gallery-caption">
+                        <h4>唐寅 (Tang Yin)</h4>
+                        <p>逢考必过</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Wedding Certificates (婚书) -->
+            <h3>Wedding Certificates (婚书)</h3>
+            
+            <!-- Wedding 1 系列 - 横版大图 -->
+            <div class="gallery-grid wedding-1-grid">
+                <div class="gallery-item">
+                    <img src="assets/wedding_1_zj.png" alt="婚书1 - 赵佶体">
+                    <div class="gallery-caption">
+                        <h4>赵佶 (Zhao Ji)</h4>
+                        <p>Wedding Certificate 1</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wedding_1_zmf.png" alt="婚书1 - 赵孟頫体">
+                    <div class="gallery-caption">
+                        <h4>赵孟頫 (Zhao Mengfu)</h4>
+                        <p>Wedding Certificate 1</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Wedding 2 系列 - 竖版图片 -->
+            <div class="gallery-grid wedding-grid">
+                <div class="gallery-item">
+                    <img src="assets/wedding_2_mf.png" alt="婚书2 - 米芾体">
+                    <div class="gallery-caption">
+                        <h4>米芾 (Mi Fu)</h4>
+                        <p>Wedding Certificate 2</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wedding_2_ty.png" alt="婚书2 - 唐寅体">
+                    <div class="gallery-caption">
+                        <h4>唐寅 (Tang Yin)</h4>
+                        <p>Wedding Certificate 2</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/wedding_2_zjz.png" alt="婚书2 - 张即之体">
+                    <div class="gallery-caption">
+                        <h4>张即之 (Zhang Jizhi)</h4>
+                        <p>Wedding Certificate 2</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Poetry (诗词) -->
+            <h3>Poetry (诗词)</h3>
+            <div class="gallery-grid">
+                <div class="gallery-item">
+                    <img src="assets/qjj.png" alt="将进酒 - 李白">
+                    <div class="gallery-caption">
+                        <h4>将进酒 (Li Bai)</h4>
+                        <p>"Invitation to Wine" by Li Bai</p>
+                    </div>
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/cmbjx.png" alt="春眠不觉晓">
+                    <div class="gallery-caption">
+                        <h4>春晓 (Meng Haoran)</h4>
+                        <p>"Spring Dawn" - 春眠不觉晓</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Pipeline -->
+        <section class="pipeline-section">
+            <h2>Pipeline</h2>
+            <img src="assets/pipeline.png" alt="UniCalli Pipeline" />
+        </section>
+
+        <!-- Citation -->
+        <section class="citation-section">
+            <h2>Citation</h2>
+            <p>If you find UniCalli useful in your research, please cite our paper:</p>
+            <div class="citation-box">
+                <pre><code>@article{xu2025unicalli,
+  title={UniCalli: A Unified Diffusion Framework for Column-Level
+         Generation and Recognition of Chinese Calligraphy},
+  author={Xu, Tianshuo and Wang, Kai and Chen, Zhifei and Wu, Leyi
+          and Wen, Tianshui and Chao, Fei and Chen, Ying-Cong},
+  journal={arXiv preprint arXiv:2510.13745},
+  year={2025}
+}</code></pre>
+            </div>
+        </section>
+    </div>
+</body>
+</html>

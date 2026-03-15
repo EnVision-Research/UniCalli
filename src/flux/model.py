@@ -1,0 +1,307 @@
+from dataclasses import dataclass
+
+import torch
+from torch import Tensor, nn
+from einops import rearrange
+
+from .modules.layers import (DoubleStreamBlock, EmbedND, LastLayer,
+                                 MLPEmbedder, SingleStreamBlock,
+                                 timestep_embedding)
+
+
+import torch
+import torch.nn as nn
+
+class TokenDecoder(nn.Module):
+    """
+    enc:      B x N x C1   DiT 的 encoder tokens
+    slots_in: B x 5 x C1   你传入的 5 个预留 token
+    return:   B x 5 x C2
+    """
+    def __init__(self, c1, c2, num_heads=8, num_layers=1):
+        super().__init__()
+        self.blocks = nn.ModuleList([
+            nn.ModuleDict({
+                "ln_q": nn.LayerNorm(c1),
+                "ln_kv": nn.LayerNorm(c1),
+                "attn": nn.MultiheadAttention(embed_dim=c1, num_heads=num_heads, batch_first=True),
+                "ffn": nn.Sequential(
+                    nn.Linear(c1, 4*c1),
+                    nn.GELU(),
+                    nn.Linear(4*c1, c1),
+                ),
+            }) for _ in range(num_layers)
+        ])
+        self.proj_out = nn.Linear(c1, c2)
+
+    def forward(self, enc, slots_in):
+        slots = slots_in
+        for blk in self.blocks:
+            q = blk["ln_q"](slots)
+            kv = blk["ln_kv"](enc)
+            attn_out, _ = blk["attn"](query=q, key=kv, value=kv)
+            slots = slots + attn_out
+            slots = slots + blk["ffn"](slots)
+        return self.proj_out(slots)
+
+@dataclass
+class FluxParams:
+    in_channels: int
+    vec_in_dim: int
+    context_in_dim: int
+    hidden_size: int
+    mlp_ratio: float
+    num_heads: int
+    depth: int
+    depth_single_blocks: int
+    axes_dim: list[int]
+    theta: int
+    qkv_bias: bool
+    guidance_embed: bool
+
+
+class Flux(nn.Module):
+    """
+    Transformer model for flow matching on sequences.
+    """
+    _supports_gradient_checkpointing = True
+
+    def __init__(self, params: FluxParams):
+        super().__init__()
+
+        self.params = params
+        self.in_channels = params.in_channels
+        self.out_channels = self.in_channels
+        if params.hidden_size % params.num_heads != 0:
+            raise ValueError(
+                f"Hidden size {params.hidden_size} must be divisible by num_heads {params.num_heads}"
+            )
+        pe_dim = params.hidden_size // params.num_heads
+        if sum(params.axes_dim) != pe_dim:
+            raise ValueError(f"Got {params.axes_dim} but expected positional dim {pe_dim}")
+        self.hidden_size = params.hidden_size
+        self.num_heads = params.num_heads
+        self.pe_embedder = EmbedND(dim=pe_dim, theta=params.theta, axes_dim=params.axes_dim)
+        self.img_in = nn.Linear(self.in_channels, self.hidden_size, bias=True)
+        self.time_in = MLPEmbedder(in_dim=256, hidden_dim=self.hidden_size)
+        self.vector_in = MLPEmbedder(params.vec_in_dim, self.hidden_size)
+        self.guidance_in = (
+            MLPEmbedder(in_dim=256, hidden_dim=self.hidden_size) if params.guidance_embed else nn.Identity()
+        )
+        self.txt_in = nn.Linear(params.context_in_dim, self.hidden_size)
+
+        self.double_blocks = nn.ModuleList(
+            [
+                DoubleStreamBlock(
+                    self.hidden_size,
+                    self.num_heads,
+                    mlp_ratio=params.mlp_ratio,
+                    qkv_bias=params.qkv_bias,
+                )
+                for _ in range(params.depth)
+            ]
+        )
+
+        self.single_blocks = nn.ModuleList(
+            [
+                SingleStreamBlock(self.hidden_size, self.num_heads, mlp_ratio=params.mlp_ratio)
+                for _ in range(params.depth_single_blocks)
+            ]
+        )
+
+        self.final_layer = LastLayer(self.hidden_size, 1, self.out_channels)
+        self.gradient_checkpointing = False
+
+        self.module_embeddings = None
+        self.cond_txt_in = None
+    
+    def init_module_embeddings(self, tokens_num: int, cond_txt_channel=896):
+        self.module_embeddings = nn.Parameter(torch.zeros(1, tokens_num, self.hidden_size))
+        # self.module_embeddings = nn.Parameter(torch.zeros(1, 1, self.hidden_size))
+        self.cond_txt_in = nn.Linear(cond_txt_channel, self.hidden_size)
+        self.learnable_txt_ids = nn.Parameter(torch.zeros(1, 512, 3))
+
+        nn.init.xavier_uniform_(self.cond_txt_in.weight)
+        nn.init.zeros_(self.cond_txt_in.bias)
+        
+    def _set_gradient_checkpointing(self, module, value=False):
+        if hasattr(module, "gradient_checkpointing"):
+            module.gradient_checkpointing = value
+
+    @property
+    def attn_processors(self):
+        # set recursively
+        processors = {}
+
+        def fn_recursive_add_processors(name: str, module: torch.nn.Module, processors):
+            if hasattr(module, "set_processor"):
+                processors[f"{name}.processor"] = module.processor
+
+            for sub_name, child in module.named_children():
+                fn_recursive_add_processors(f"{name}.{sub_name}", child, processors)
+
+            return processors
+
+        for name, module in self.named_children():
+            fn_recursive_add_processors(name, module, processors)
+
+        return processors
+
+    def set_attn_processor(self, processor):
+        r"""
+        Sets the attention processor to use to compute attention.
+
+        Parameters:
+            processor (`dict` of `AttentionProcessor` or only `AttentionProcessor`):
+                The instantiated processor class or a dictionary of processor classes that will be set as the processor
+                for **all** `Attention` layers.
+
+                If `processor` is a dict, the key needs to define the path to the corresponding cross attention
+                processor. This is strongly recommended when setting trainable attention processors.
+
+        """
+        count = len(self.attn_processors.keys())
+
+        if isinstance(processor, dict) and len(processor) != count:
+            raise ValueError(
+                f"A dict of processors was passed, but the number of processors {len(processor)} does not match the"
+                f" number of attention layers: {count}. Please make sure to pass {count} processor classes."
+            )
+
+        def fn_recursive_attn_processor(name: str, module: torch.nn.Module, processor):
+            if hasattr(module, "set_processor"):
+                if not isinstance(processor, dict):
+                    module.set_processor(processor)
+                else:
+                    module.set_processor(processor.pop(f"{name}.processor"))
+
+            for sub_name, child in module.named_children():
+                fn_recursive_attn_processor(f"{name}.{sub_name}", child, processor)
+
+        for name, module in self.named_children():
+            fn_recursive_attn_processor(name, module, processor)
+
+    def forward(
+        self,
+        img: Tensor,
+        img_ids: Tensor,
+        txt: Tensor,
+        txt_ids: Tensor,
+        y: Tensor,
+        timesteps: Tensor,
+        timesteps2: Tensor | None = None,
+        cond_txt_latent: Tensor | None = None,
+        block_controlnet_hidden_states=None,
+        guidance: Tensor | None = None,
+        image_proj: Tensor | None = None, 
+        ip_scale: Tensor | float = 1.0, 
+    ) -> Tensor:
+        if img.ndim != 3 or txt.ndim != 3:
+            raise ValueError("Input img and txt tensors must have 3 dimensions.")
+
+        # running on sequences img
+        img = self.img_in(img)
+        if self.module_embeddings is not None:
+            img[:, img.size(1)//2:] += self.module_embeddings
+        vec = self.time_in(timestep_embedding(timesteps, 256))
+
+        if cond_txt_latent is not None:
+            assert self.cond_txt_in is not None
+            cond_txt = self.cond_txt_in(cond_txt_latent)
+            cond_txt_length = cond_txt.shape[1]
+        
+        if timesteps2 is not None:
+            vec2 = self.time_in(timestep_embedding(timesteps2, 256))
+        else:
+            vec2 = None
+
+        if self.params.guidance_embed:
+            if guidance is None:
+                raise ValueError("Didn't get guidance strength for guidance distilled model.")
+            vec = vec + self.guidance_in(timestep_embedding(guidance, 256))
+            if vec2 is not None:
+                vec2 = vec2 + self.guidance_in(timestep_embedding(guidance, 256))
+
+        if y.dtype != vec.dtype:
+            y = y.to(vec.dtype)
+
+        vec = vec + self.vector_in(y)
+        if vec2 is not None:
+            vec2 = vec2 + self.vector_in(y)
+        txt = self.txt_in(txt)
+
+        if cond_txt_latent is not None:
+            # 把txt尾部替换为cond_txt，后面blocks里会专门给txt t_cond做adaLN
+            txt[:, -cond_txt_length:] = cond_txt  # [1, 5, 3072]
+            txt_ids += self.learnable_txt_ids
+
+        ids = torch.cat((txt_ids, img_ids), dim=1)  # [1, 512, 3072], [1, 640, 3072]
+        pe = self.pe_embedder(ids)
+        if block_controlnet_hidden_states is not None:
+            controlnet_depth = len(block_controlnet_hidden_states)
+        for index_block, block in enumerate(self.double_blocks):
+            if self.training and self.gradient_checkpointing:
+
+                def create_custom_forward(module, return_dict=None):
+                    def custom_forward(*inputs):
+                        if return_dict is not None:
+                            return module(*inputs, return_dict=return_dict)
+                        else:
+                            return module(*inputs)
+
+                    return custom_forward
+
+                ckpt_kwargs: Dict[str, Any] = {"use_reentrant": False} if is_torch_version(">=", "1.11.0") else {}
+                encoder_hidden_states, hidden_states = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(block),
+                    img,
+                    txt,
+                    vec,
+                    vec2,
+                    pe,
+                    image_proj,
+                    ip_scale,
+                )
+            else:
+                img, txt = block(
+                    img=img, 
+                    txt=txt, 
+                    vec=vec, 
+                    vec2=vec2,
+                    pe=pe, 
+                    image_proj=image_proj,
+                    ip_scale=ip_scale, 
+                )
+            # controlnet residual
+            if block_controlnet_hidden_states is not None:
+                img = img + block_controlnet_hidden_states[index_block % 2]
+
+
+        img = torch.cat((txt, img), 1)
+        for block in self.single_blocks:
+            if self.training and self.gradient_checkpointing:
+
+                def create_custom_forward(module, return_dict=None):
+                    def custom_forward(*inputs):
+                        if return_dict is not None:
+                            return module(*inputs, return_dict=return_dict)
+                        else:
+                            return module(*inputs)
+
+                    return custom_forward
+
+                ckpt_kwargs: Dict[str, Any] = {"use_reentrant": False} if is_torch_version(">=", "1.11.0") else {}
+                encoder_hidden_states, hidden_states = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(block),
+                    img,
+                    vec,
+                    vec2,
+                    pe,
+                    txt.shape[1]
+                )
+            else:
+                img = block(img, vec=vec, vec2=vec2, pe=pe, text_length=txt.shape[1])
+
+        img = img[:, txt.shape[1]:, ...]
+        img = self.final_layer(img, vec, vec2)  # (N, T, patch_size ** 2 * out_channels)
+        return img
