@@ -30,6 +30,7 @@ from src.flux.util import (
 
 from transformers import CLIPVisionModelWithProjection, CLIPImageProcessor
 from transformers import AutoModel, AutoTokenizer
+from .runtime import seeded_random, empty_device_cache
 
 
 class XFluxPipeline:
@@ -198,11 +199,11 @@ class XFluxPipeline:
         cond_txt_latent = self.embed_tokens(cond_text_token).to(self.device, torch.bfloat16)
 
         if not is_generation:
-            cond_txt_latent = torch.rand(
-                cond_txt_latent.size(), 
+            cond_txt_latent = seeded_random(
+                cond_txt_latent.size(),
                 device=self.device,
                 dtype=torch.bfloat16,
-                generator=torch.Generator(device=self.device).manual_seed(seed)
+                seed=seed, normal=False,
             )
         
         width = 16 * (width // 16)
@@ -327,8 +328,12 @@ class XFluxPipeline:
                 self.t5, self.clip = self.t5.to(self.device), self.clip.to(self.device)
 
             if not self.controlnet_loaded and controlnet_image is not None:  # tianshuo
+                if self.offload:
+                    self.ae.encoder.to(self.device)
                 # width //= 2
                 cond_latent = self.ae.encode(controlnet_image.to(self.device, dtype=torch.float32))
+                if self.offload:
+                    self.offload_model_to_cpu(self.ae.encoder)
 
             inp_cond = prepare(t5=self.t5, clip=self.clip, img=x, prompt=prompt)
             neg_inp_cond = prepare(t5=self.t5, clip=self.clip, img=x, prompt=neg_prompt)
@@ -441,11 +446,11 @@ class XFluxPipeline:
         if not self.offload: return
         for model in models:
             model.cpu()
-            torch.cuda.empty_cache()
+            empty_device_cache(self.device)
 
 
 class XFluxSampler(XFluxPipeline):
-    def __init__(self, clip, t5, ae, ref_latent, model, device, intern_vlm_path):
+    def __init__(self, clip, t5, ae, ref_latent, model, device, intern_vlm_path, offload=False):
         self.clip = clip
         self.t5 = t5
         self.ae = ae
@@ -454,7 +459,7 @@ class XFluxSampler(XFluxPipeline):
         self.device = device
         self.controlnet_loaded = False
         self.ip_loaded = False
-        self.offload = False
+        self.offload = offload
         self.ref_latent = ref_latent
 
         # Load embedding - try lightweight extracted version first, fallback to full model

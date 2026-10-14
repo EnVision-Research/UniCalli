@@ -9,6 +9,7 @@ class HFEmbedder(nn.Module):
         self.is_clip = version.startswith("openai")
         self.max_length = max_length
         self.output_key = "pooler_output" if self.is_clip else "last_hidden_state"
+        hf_kwargs.setdefault("low_cpu_mem_usage", True)
 
         if self.is_clip:
             self.tokenizer: CLIPTokenizer = CLIPTokenizer.from_pretrained(version, max_length=max_length)
@@ -31,7 +32,9 @@ class HFEmbedder(nn.Module):
         )
 
         outputs = self.hf_module(
-            input_ids=batch_encoding["input_ids"].to(self.hf_module.device),
+            input_ids=batch_encoding["input_ids"].to(
+                getattr(self, "execution_device", self.hf_module.device)
+            ),
             attention_mask=None,
             output_hidden_states=False,
         )

@@ -7,6 +7,7 @@ from torch import Tensor
 
 from .model import Flux
 from .modules.conditioner import HFEmbedder
+from .runtime import seeded_random
 
 def get_noise(
     num_samples: int,
@@ -16,15 +17,17 @@ def get_noise(
     dtype: torch.dtype,
     seed: int,
 ):
-    return torch.randn(
-        num_samples,
-        16,
-        # allow for packing
-        2 * math.ceil(height / 16),
-        2 * math.ceil(width / 16),
+    return seeded_random(
+        (
+            num_samples,
+            16,
+            # allow for packing
+            2 * math.ceil(height / 16),
+            2 * math.ceil(width / 16),
+        ),
         device=device,
         dtype=dtype,
-        generator=torch.Generator(device=device).manual_seed(seed),
+        seed=seed,
     )
 
 

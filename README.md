@@ -42,6 +42,9 @@ For academic research and non-commercial use only.
 
 ## Getting Started
 
+For experimental Apple Silicon inference and its validation limits, see
+[macOS / MPS instructions](docs/macos.md).
+
 ### Installation
 
 ```bash
